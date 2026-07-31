@@ -1,0 +1,1 @@
+"""Detection package (stub — Phase 2 skeleton, no implementation yet)."""
