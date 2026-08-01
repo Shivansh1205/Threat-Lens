@@ -82,6 +82,8 @@ For each phase: **goal**, **exit criteria** (how we know it's done), **out of sc
 **Open questions**
 - Should the weights be configurable per organization, or fixed? *(Leaning: fixed for v1, configurable later.)*
 
+**Follow-up (flagged during implementation, not yet built):** `BehaviorProfile.user_risk_score`'s decay (`USER_RISK_DECAY_FACTOR`) is currently applied once per NEW ALERT EVENT for that user, not once per elapsed unit of time. A user who triggers no further alerts keeps whatever rolling risk score they last had, indefinitely — there's no background/scheduled process that decays it purely with the passage of time. True time-based decay (e.g. "shrink every user's score by X% once per day regardless of activity") needs a scheduled job or a lazy decay-on-read computed from elapsed time since the profile's last update, neither of which exist yet. Named here explicitly as a Phase 5.5/6+ follow-up rather than being silently faked — see `app/scoring/risk_scorer.py`'s module docstring for the implementation-level version of this note.
+
 ---
 
 ## Phase 5 — AI-assisted explainability
@@ -179,9 +181,7 @@ Not part of the project, but worth capturing so we don't lose them:
 
 ## Current position
 
-Update this section as we move. Suggested format:
-
-> **We are in Phase X.**
-> Recently completed: [short list]
-> Currently working on: [short list]
-> Blockers: [if any]
+> **We are past Phase 4 (dynamic risk scoring), about to start Phase 5 (AI-assisted explainability).**
+> Recently completed: real detection engine (Phase 3) with brute-force/port-scan/unusual-IP rules, per-user behavioral profiling (BehaviorProfiler/BehaviorProfile), a concurrency-safety fix for the two stateful detectors, and dynamic risk scoring — `RiskScorer` now combines each detector's raw score with the user's behavioral deviation_score into a final, risk-adjusted score/severity (both preserved on `Alert` via raw_score/raw_severity vs. score/severity), plus a rolling per-user `user_risk_score` surfaced via `GET /api/v1/users/high-risk`.
+> Currently working on: nothing yet — Phase 5 (LLM explanations via Ollama/Mistral) has not been started.
+> Blockers: none. Known follow-up: `user_risk_score` decay is currently per-alert-event only, not per-elapsed-time — see the note under Phase 4 above.

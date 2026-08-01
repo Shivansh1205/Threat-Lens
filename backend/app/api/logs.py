@@ -64,24 +64,57 @@ def ingest_log(payload: LogEventIn, db: Session = Depends(get_db)) -> LogIngestR
     db.add(event)
     db.flush()
 
-    # 3. Run the real detectors BEFORE updating the behavior profile.
+    # 3. Load the user's profile and compute THIS event's deviation score,
+    # before running detection or applying this event's own mutations.
     #
-    # UnusualIpDetector reads BehaviorProfile.known_ips / login_count, and
-    # BehaviorProfiler.update() (step 4) unconditionally folds this event's IP
-    # into known_ips. If update() ran first, the detector would always find
-    # its own event's IP already "known" and could never fire. Running
-    # detection first means it observes the profile as it stood *before* this
-    # event — see app/profiling/profiler.py's module docstring for the full
-    # explanation.
-    alerts = get_registry().run_all(event, db)
-
-    # 4. Update the persistent behavior profile (known IPs, login-hour EMA,
-    # session duration, deviation score) now that detection has run.
+    # Ordering here is deliberate and has two separate constraints that both
+    # have to hold at once (Phase 5 note — see Phase 4's near-identical
+    # ordering bug for why this needs spelling out rather than guessing):
+    #
+    #   (a) UnusualIpDetector reads BehaviorProfile.known_ips / login_count,
+    #       and BehaviorProfiler.update() unconditionally folds this event's
+    #       IP into known_ips. If detection ran after the profile's
+    #       known_ips/login_count were mutated for this event, the detector
+    #       would always find its own event's IP already "known" and could
+    #       never fire (the Phase 4 bug). So detection must run against the
+    #       profile in its PRE-mutation state.
+    #
+    #   (b) RiskScorer needs profile.deviation_score to reflect THIS event
+    #       (how unusual *this* IP/hour/frequency was), not the previous
+    #       event's leftover value. deviation_score is normally computed as
+    #       the first step inside profiler.update(), which runs *after*
+    #       detection per (a) — so if we waited for update() to compute it,
+    #       RiskScorer would score every alert against stale, one-event-old
+    #       context.
+    #
+    # Resolution: call BehaviorProfiler.compute_deviation() directly, ahead
+    # of both detection and the rest of update(). It only ever *writes*
+    # profile.deviation_score — it never touches known_ips / login_count /
+    # the EMA fields — so calling it standalone here doesn't disturb the
+    # pre-mutation state that (a) depends on. Detection and RiskScorer then
+    # both see the profile mid-way through "this event's" processing: prior
+    # known_ips/login_count (for the detector), current deviation_score (for
+    # the scorer). profiler.update() below recomputes compute_deviation()
+    # again as its own first step — same inputs, same result, so this is a
+    # harmless redundant assignment, not a second source of truth — and then
+    # applies the actual known_ips/EMA mutations for next time.
     profiler = BehaviorProfiler(db, get_settings().EMA_ALPHA)
+    profile = profiler.get_or_create(payload.user_id)
+    profiler.compute_deviation(event, profile)
+
+    # 4. Run the real detectors + risk scoring against that pre-mutation,
+    # current-deviation profile state.
+    alerts = get_registry().run_all(event, db, profile)
+
+    # 5. Now apply this event's own mutations to the persistent behavior
+    # profile (known IPs, login-hour EMA, session duration) — safe to do only
+    # now that both detection and scoring have already read the prior state
+    # they each depend on.
     profiler.update(event)
 
-    # Ensure the event + user upsert + profile update are all committed even
-    # when no alerts fired.
+    # Single commit: event, user upsert, alerts (with their risk-adjusted
+    # scores), and the profile (deviation_score, user_risk_score, known_ips,
+    # EMAs) all land together, even when no alerts fired.
     db.commit()
 
     return LogIngestResult(event_id=event.id, alert_ids=[a.id for a in alerts])

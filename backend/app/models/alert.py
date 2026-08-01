@@ -19,8 +19,16 @@ class Alert(Base):
     """A raised alert.
 
     ``explanation`` and ``mitigation_steps`` are populated later by the AI layer
-    (Phase 5); they are nullable here so detection can emit an alert without
+    (Phase 6); they are nullable here so detection can emit an alert without
     waiting on the LLM.
+
+    ``score``/``severity`` are the FINAL, risk-adjusted values — what the
+    analyst sees and what the dashboard sorts/filters by. ``raw_score``/
+    ``raw_severity`` preserve exactly what the detector originally assigned,
+    before ``RiskScorer`` folded in the user's behavioral deviation_score
+    (see app/scoring/risk_scorer.py). Keeping both is what makes the
+    context-aware adjustment auditable: you can always see what the rule
+    said vs. what the system concluded once behavioral context was applied.
     """
 
     __tablename__ = "alerts"
@@ -32,6 +40,10 @@ class Alert(Base):
     alert_type: Mapped[str] = mapped_column(String, nullable=False)
     severity: Mapped[Severity] = mapped_column(SAEnum(Severity, name="severity"), nullable=False)
     score: Mapped[int] = mapped_column(Integer, nullable=False)
+    raw_severity: Mapped[Severity] = mapped_column(
+        SAEnum(Severity, name="severity"), nullable=False
+    )
+    raw_score: Mapped[int] = mapped_column(Integer, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
 
     triggered_by_event_id: Mapped[uuid.UUID | None] = mapped_column(

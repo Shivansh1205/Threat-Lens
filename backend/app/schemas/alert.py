@@ -18,6 +18,8 @@ class AlertOut(BaseModel):
     alert_type: str
     severity: Severity
     score: int
+    raw_severity: Severity
+    raw_score: int
     message: str
     triggered_by_event_id: UUID | None = None
     explanation: str | None = None

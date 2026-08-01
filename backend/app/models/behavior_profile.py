@@ -55,6 +55,17 @@ class BehaviorProfile(Base):
 
     deviation_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
+    # Rolling, decaying cumulative risk for this user (Phase 5 / RiskScorer).
+    # Distinct from deviation_score: deviation_score is "how odd was the most
+    # recent event", user_risk_score is "how concerning is this user's
+    # pattern over time, across every alert they've triggered." Indexed
+    # because GET /api/v1/users/high-risk sorts on it. Decays once per new
+    # alert event, not per elapsed time — see app/scoring/risk_scorer.py and
+    # PHASES.md for why true time-based decay is a later-phase follow-up.
+    user_risk_score: Mapped[float] = mapped_column(
+        Float, default=0.0, nullable=False, index=True
+    )
+
     # Dedup key: skip processing if an incoming event's timestamp is <= this.
     last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

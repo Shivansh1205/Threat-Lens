@@ -56,6 +56,34 @@ class Settings(BaseSettings):
     # alpha for all of them, on purpose — don't invent per-metric alphas.
     EMA_ALPHA: float = 0.05
 
+    # --- Severity bucketing (Phase 3/4/5) ---
+    # Centralized here so RiskScorer's post-adjustment re-bucketing uses the
+    # EXACT same boundaries as everything else (ARCHITECTURE.md's "Dynamic
+    # Risk Scoring" section). Inclusive upper bounds; CRITICAL is anything
+    # above SEVERITY_HIGH_MAX. See app/scoring/risk_scorer.severity_for_score.
+    SEVERITY_LOW_MAX: int = 25
+    SEVERITY_MEDIUM_MAX: int = 50
+    SEVERITY_HIGH_MAX: int = 75
+
+    # --- Dynamic risk scoring (Phase 5) ---
+    # How much a user's current behavioral deviation_score (0.0-1.0) can push
+    # a detector's raw alert score toward 100. Scaled by remaining headroom
+    # (100 - base_score) so it can meaningfully escalate a borderline alert
+    # without catapulting a low-severity one straight to CRITICAL. See
+    # app/scoring/risk_scorer.RiskScorer.score_alert.
+    DEVIATION_WEIGHT: float = 0.3
+
+    # Rolling per-user risk score (BehaviorProfile.user_risk_score): how much
+    # weight one alert's adjusted score contributes to the cumulative score,
+    # and how much of the previous cumulative score survives each update.
+    # Decay is applied once per NEW ALERT EVENT for this user, not once per
+    # elapsed unit of time — a "proper" time-based decay (independent of
+    # whether new events arrive) needs a scheduled job and is a documented
+    # Phase 5.5/6+ follow-up (see PHASES.md). Do not read this as calendar
+    # decay.
+    RISK_CONTRIBUTION_WEIGHT: float = 0.15
+    USER_RISK_DECAY_FACTOR: float = 0.995
+
 
 @lru_cache
 def get_settings() -> Settings:

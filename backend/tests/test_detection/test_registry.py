@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.detection.registry import DetectorRegistry
 from app.detection.rules import BruteForceDetector, PortScanDetector, UnusualIpDetector
 from app.models.alert import Alert
+from app.models.behavior_profile import BehaviorProfile
 from app.models.user import User
 from app.schemas.common import EventType
 
@@ -17,6 +18,23 @@ def _fresh_registry() -> DetectorRegistry:
     return DetectorRegistry(
         [BruteForceDetector(), PortScanDetector(), UnusualIpDetector()]
     )
+
+
+def _zero_deviation_profile(db_session: Session, user_id: str) -> BehaviorProfile:
+    """A BehaviorProfile with deviation_score/user_risk_score pinned at 0.0.
+
+    These registry-level tests exercise detectors + persistence directly,
+    without going through BehaviorProfiler.update() — so scoring should be a
+    true no-op (adjusted == raw) and these tests' pre-Phase-5 score/severity
+    assertions should hold unchanged. See test_score_alert_no_deviation in
+    test_scoring/test_risk_scorer.py for the formula-level proof.
+    """
+    profile = BehaviorProfile(
+        user_id=user_id, known_ips=[], deviation_score=0.0, user_risk_score=0.0
+    )
+    db_session.add(profile)
+    db_session.flush()
+    return profile
 
 
 def _persist_user_and_event(db_session: Session, event) -> None:
@@ -38,8 +56,9 @@ def test_single_failure_persists_no_alert(db_session: Session) -> None:
     reg = _fresh_registry()
     ev = make_event("alice", EventType.LOGIN_FAILURE, datetime(2026, 1, 1, tzinfo=timezone.utc))
     _persist_user_and_event(db_session, ev)
+    profile = _zero_deviation_profile(db_session, "alice")
 
-    alerts = reg.run_all(ev, db_session)
+    alerts = reg.run_all(ev, db_session, profile)
     assert alerts == []
     assert db_session.query(Alert).count() == 0
 
@@ -47,6 +66,7 @@ def test_single_failure_persists_no_alert(db_session: Session) -> None:
 def test_five_rapid_failures_persists_one_medium(db_session: Session) -> None:
     reg = _fresh_registry()
     base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    profile = _zero_deviation_profile(db_session, "alice")
 
     last_alerts: list[Alert] = []
     for i in range(5):
@@ -54,17 +74,21 @@ def test_five_rapid_failures_persists_one_medium(db_session: Session) -> None:
             "alice", EventType.LOGIN_FAILURE, base.replace(second=i * 2)
         )
         _persist_user_and_event(db_session, ev)
-        last_alerts = reg.run_all(ev, db_session)
+        last_alerts = reg.run_all(ev, db_session, profile)
 
     assert len(last_alerts) == 1
     assert last_alerts[0].severity.name == "MEDIUM"
     assert last_alerts[0].alert_type == "brute_force"
+    assert last_alerts[0].score == 45
+    assert last_alerts[0].raw_score == 45
+    assert last_alerts[0].raw_severity.name == "MEDIUM"
     assert db_session.query(Alert).count() == 1
 
 
 def test_triggered_by_event_id_is_linked(db_session: Session) -> None:
     reg = _fresh_registry()
     base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    profile = _zero_deviation_profile(db_session, "alice")
 
     events = []
     for i in range(5):
@@ -72,7 +96,7 @@ def test_triggered_by_event_id_is_linked(db_session: Session) -> None:
             "alice", EventType.LOGIN_FAILURE, base.replace(second=i * 2)
         )
         _persist_user_and_event(db_session, ev)
-        alerts = reg.run_all(ev, db_session)
+        alerts = reg.run_all(ev, db_session, profile)
         events.append((ev, alerts))
 
     # The 5th event (index 4) is the one that triggered the MEDIUM alert.
@@ -111,6 +135,7 @@ def test_port_scan_60_events_no_crash_two_alerts(db_session: Session) -> None:
         )
     )
     db_session.commit()
+    profile = _zero_deviation_profile(db_session, "scanner")
 
     all_alerts: list[Alert] = []
     for i in range(60):
@@ -123,7 +148,7 @@ def test_port_scan_60_events_no_crash_two_alerts(db_session: Session) -> None:
         )
         db_session.add(ev)
         db_session.flush()
-        alerts = reg.run_all(ev, db_session)
+        alerts = reg.run_all(ev, db_session, profile)
         db_session.commit()  # simulates what the ingest endpoint does
         all_alerts.extend(alerts)
 
