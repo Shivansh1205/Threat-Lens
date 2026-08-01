@@ -4,6 +4,41 @@ The synchronous ingest path — validate, upsert the user, persist the event,
 run the detector registry, return what fired. A message queue between ingest
 and detection is deliberately skipped (see PHASES.md open question for Phase
 2): direct call is fine at our volumes.
+
+WHY THIS ENDPOINT STAYS `def`, NOT `async def` (Phase 7a note): adding the
+WebSocket broadcast here raised the question of whether to convert
+``ingest_log`` to ``async def`` so it could ``await
+get_ws_manager().broadcast(...)`` directly. Decided against it, deliberately:
+
+- FastAPI runs sync ``def`` endpoints on Starlette's threadpool — real OS
+  threads, genuinely concurrent. That's the whole reason Phase 4 needed a
+  ``threading.Lock`` in ``BruteForceDetector``/``PortScanDetector`` in the
+  first place (two threads racing the same in-memory state). If this
+  endpoint became ``async def``, FastAPI would instead run it directly on
+  the single main event loop — and since every DB call here
+  (``db.execute``/``db.flush``/``db.commit``, the whole detection/scoring/
+  profiler pipeline) is *synchronous* SQLAlchemy, none of it is ever
+  ``await``-ed, so nothing would yield back to the loop mid-request. In
+  practice that means requests would stop being genuinely concurrent at
+  all — each one would run to completion on the one loop thread before the
+  next could even start, which is a straight throughput regression for
+  bursty ingestion (e.g. generate_logs.py's 60-event port_scan burst)
+  compared to today's real thread-level parallelism. It would also make the
+  Phase 4 locks moot (no more thread interleaving to protect against) but
+  for the wrong reason — accidentally serializing everything, not fixing
+  anything.
+- So the endpoint stays sync, and the broadcast is dispatched via
+  ``WebSocketManager.schedule_broadcast()`` — a sync method that hands the
+  actual ``async def broadcast()`` call to the main event loop via
+  ``asyncio.run_coroutine_threadsafe`` (captured once at app startup, see
+  main.py's lifespan handler). This is the standard, correct bridge for
+  "call async code, from a different thread, targeting a specific already-
+  running loop" — unlike ``asyncio.run()``, which would spin up a brand-new
+  throwaway loop inside this worker thread and try to drive the live
+  WebSocket objects (bound to the MAIN loop) from that foreign loop, which
+  asyncio does not support safely. See
+  app/realtime/websocket_manager.py's ``schedule_broadcast`` docstring for
+  the full detail.
 """
 
 from datetime import datetime, timezone
@@ -21,6 +56,7 @@ from app.detection.registry import get_registry
 from app.models.log_event import LogEvent
 from app.models.user import User
 from app.profiling.profiler import BehaviorProfiler
+from app.realtime.websocket_manager import get_ws_manager
 from app.schemas.log_event import LogEventIn
 
 router = APIRouter(tags=["ingestion"])
@@ -122,7 +158,29 @@ def ingest_log(
     # EMAs) all land together, even when no alerts fired.
     db.commit()
 
-    # 6. Schedule explanation generation for each new alert — AFTER the
+    # 6. Broadcast each new alert to connected dashboard clients — AFTER the
+    # commit above, never before, so we never push something that could
+    # still roll back. Payload is deliberately small/clean: id, user_id,
+    # alert_type, severity, score, message, created_at. explanation/
+    # mitigation_steps are NOT included — they don't exist yet at this point
+    # (generated moments later by the background task below) and the
+    # frontend can re-fetch full alert details on demand. Whether a second
+    # "alert updated" push should fire once the explanation lands is left
+    # for Prompt 7b to decide — not needed for the initial live-feed feature.
+    for alert in alerts:
+        get_ws_manager().schedule_broadcast(
+            {
+                "id": str(alert.id),
+                "user_id": alert.user_id,
+                "alert_type": alert.alert_type,
+                "severity": alert.severity.value,
+                "score": alert.score,
+                "message": alert.message,
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
+            }
+        )
+
+    # 7. Schedule explanation generation for each new alert — AFTER the
     # response would be considered complete, never inline. Alerts are
     # persisted above with explanation=NULL/mitigation_steps=NULL; a
     # BackgroundTasks job (Starlette's, no new dependency) calls the LLM and

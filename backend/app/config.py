@@ -1,8 +1,10 @@
 """Application configuration, loaded from environment variables / .env."""
 
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -18,6 +20,30 @@ class Settings(BaseSettings):
     APP_NAME: str = "ThreatLens"
     ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+
+    # --- CORS ---
+    # Origins allowed to call the API from a browser (frontend dev server,
+    # plus the 127.0.0.1 alias browsers sometimes resolve localhost to).
+    # `NoDecode` matters here: pydantic-settings v2 normally tries to
+    # JSON-decode env values for "complex" types like list[str] *before*
+    # any validator runs, so a plain comma-separated string in .env
+    # (e.g. `CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173`)
+    # would fail with a SettingsError ("Expecting value") rather than
+    # silently doing the wrong thing. NoDecode disables that JSON-decode
+    # attempt so the raw string reaches the validator below untouched;
+    # a JSON array string (`["http://...", "http://..."]`) still works too,
+    # since the validator only splits when it actually receives a str.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     # --- Database ---
     DATABASE_URL: str = "postgresql://user:pass@localhost:5432/threatlens"
@@ -82,13 +108,36 @@ class Settings(BaseSettings):
     # Rolling per-user risk score (BehaviorProfile.user_risk_score): how much
     # weight one alert's adjusted score contributes to the cumulative score,
     # and how much of the previous cumulative score survives each update.
-    # Decay is applied once per NEW ALERT EVENT for this user, not once per
-    # elapsed unit of time — a "proper" time-based decay (independent of
-    # whether new events arrive) needs a scheduled job and is a documented
-    # Phase 5.5/6+ follow-up (see PHASES.md). Do not read this as calendar
-    # decay.
+    # Decay here is applied once per NEW ALERT EVENT for this user, not once
+    # per elapsed unit of time. See DAILY_DECAY_RATE below for the
+    # complementary time-based decay that closes that gap — this constant
+    # and that one are deliberately separate mechanisms; this per-event decay
+    # is unchanged.
     RISK_CONTRIBUTION_WEIGHT: float = 0.15
     USER_RISK_DECAY_FACTOR: float = 0.995
+
+    # --- Time-based risk decay (closes the Phase 4/5 "decay is per-event
+    # only" follow-up — see app/scoring/decay_job.py and PHASES.md) ---
+    # Applied by a scheduled job, independent of whether the user triggers
+    # any new alerts: decayed = score * (DAILY_DECAY_RATE ** days_elapsed).
+    # 0.98 roughly halves an untouched score in ~34 days (0.98**34 ≈ 0.5) —
+    # old suspicious behavior stops mattering after about a month without a
+    # flag vanishing overnight. This is additive to, not a replacement for,
+    # USER_RISK_DECAY_FACTOR above.
+    DAILY_DECAY_RATE: float = 0.98
+
+    # How often the scheduled decay job runs. An interval rather than a
+    # fixed wall-clock time (e.g. "run at 03:00") — simpler, avoids timezone
+    # questions, adequate at this project's scale. A production deployment
+    # would likely prefer a fixed low-traffic hour instead of a rolling
+    # interval, so restarts don't drift the schedule.
+    DECAY_JOB_INTERVAL_HOURS: float = 24.0
+
+    # Below this, a profile's user_risk_score is clamped to exactly 0.0
+    # rather than left to decay asymptotically forever (and profiles at or
+    # below this are skipped entirely — no point processing/writing rows
+    # that are already effectively zero).
+    DECAY_SCORE_FLOOR: float = 0.01
 
 
 @lru_cache

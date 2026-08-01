@@ -1,8 +1,6 @@
 """Pydantic DTO for behavior profile responses.
 
-No endpoint reads this yet — Phase 5 adds `GET /profiles/{user_id}` (or
-similar). Defined now so the model-to-schema mapping is exercised by tests
-ahead of the API landing.
+Read by `GET /api/v1/users/{user_id}/profile` (see app/api/users.py).
 """
 
 from datetime import datetime
@@ -12,7 +10,15 @@ from pydantic import BaseModel, ConfigDict
 
 
 class BehaviorProfileOut(BaseModel):
-    """A user's behavioral baseline, as it will be returned by the API."""
+    """A user's behavioral baseline, as returned by the API.
+
+    ``days_since_first_seen`` is the one derived field this endpoint adds
+    beyond the raw model columns — computed from ``created_at`` at request
+    time, not stored. Deliberately not adding more than this: a historical
+    time series of ``user_risk_score`` would be genuinely useful too, but
+    the DB only ever stores the current value (no history table), so it
+    isn't reconstructable — noted as a known limitation rather than faked.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -28,6 +34,8 @@ class BehaviorProfileOut(BaseModel):
     avg_session_duration_seconds: float | None = None
     total_sessions: int
     deviation_score: float
+    user_risk_score: float
     last_event_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    days_since_first_seen: float

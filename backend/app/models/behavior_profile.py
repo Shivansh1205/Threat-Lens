@@ -59,9 +59,12 @@ class BehaviorProfile(Base):
     # Distinct from deviation_score: deviation_score is "how odd was the most
     # recent event", user_risk_score is "how concerning is this user's
     # pattern over time, across every alert they've triggered." Indexed
-    # because GET /api/v1/users/high-risk sorts on it. Decays once per new
-    # alert event, not per elapsed time — see app/scoring/risk_scorer.py and
-    # PHASES.md for why true time-based decay is a later-phase follow-up.
+    # because GET /api/v1/users/high-risk sorts on it. Decays via two
+    # complementary mechanisms: once per new alert event (RiskScorer.
+    # update_user_risk, app/scoring/risk_scorer.py), and independently on a
+    # schedule purely as a function of elapsed time since `updated_at`
+    # (app/scoring/decay_job.py) — the latter is what makes a score fall
+    # even for a user who triggers nothing further.
     user_risk_score: Mapped[float] = mapped_column(
         Float, default=0.0, nullable=False, index=True
     )

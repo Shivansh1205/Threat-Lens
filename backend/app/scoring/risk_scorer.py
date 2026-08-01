@@ -18,14 +18,22 @@ Scoring layer for the design rationale):
    mutated in place once per alert (caller commits). This is what backs
    ``GET /api/v1/users/high-risk``.
 
-   IMPORTANT — decay is per-alert-event, not per-elapsed-time. A "proper"
-   decay would shrink a user's rolling risk once per elapsed day even if they
-   trigger no new alerts, which needs a scheduled/background job. That
-   infrastructure doesn't exist yet, so for now the decay factor is applied
-   once each time a NEW alert arrives for that user — a user who triggers
-   nothing keeps whatever score they last had, forever, until (or unless) a
-   scheduled job is added. See PHASES.md for this documented as a named
-   Phase 5.5/6+ follow-up. Do not mistake this for real-time decay.
+   IMPORTANT — ``update_user_risk()``'s decay below is per-alert-event, not
+   per-elapsed-time: the decay factor is applied once each time a NEW alert
+   arrives for that user. A user who triggers nothing keeps whatever score
+   they last had — from THIS mechanism alone. That gap is now closed by a
+   separate, complementary mechanism: ``app/scoring/decay_job.py``'s
+   ``run_decay_pass()``, run on a schedule (see main.py's lifespan handler)
+   plus on-demand via ``POST /api/v1/admin/decay-now``, shrinks
+   ``user_risk_score`` purely as a function of elapsed wall-clock time since
+   the profile was last touched — independent of whether any new alert ever
+   arrives. The two mechanisms are additive, not overlapping in a
+   double-counting sense: see decay_job.py's module docstring for why a
+   profile touched by a fresh alert (which bumps ``updated_at``) sees
+   negligible decay from the scheduled job on the same day, and why running
+   the scheduled job frequently converges to the same result as running it
+   once after the equivalent elapsed time. This was previously named in
+   PHASES.md as a Phase 5.5/6+ follow-up; that entry is now marked resolved.
 """
 
 from __future__ import annotations
@@ -116,8 +124,10 @@ class RiskScorer:
         event, call this once per alert (not once per event) — each alert is
         its own contribution to the rolling score.
 
-        See this module's docstring for why decay is per-alert-event rather
-        than per-elapsed-time in this phase.
+        See this module's docstring for why decay here is per-alert-event
+        rather than per-elapsed-time, and for the separate, complementary
+        time-based decay in app/scoring/decay_job.py that covers the gap
+        this leaves. This method itself is unchanged by that addition.
         """
         s = self.settings
         current = profile.user_risk_score or 0.0

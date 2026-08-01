@@ -25,11 +25,12 @@ the dashboard for the outcomes.
 from __future__ import annotations
 
 import argparse
-import asyncio
-from dataclasses import dataclass, field
+import json
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-
-import httpx
 
 # --------------------------------------------------------------------- events
 
@@ -149,20 +150,20 @@ SCENARIOS: dict[str, Scenario] = {
         name="brute_force",
         events=_brute_force(),
         expected_alerts=4,
-        description="25 failures escalating MEDIUM→HIGH→CRITICAL, then a "
+        description="25 failures escalating MEDIUM->HIGH->CRITICAL, then a "
         "successful login (brute_force_success).",
     ),
     "port_scan": Scenario(
         name="port_scan",
         events=_port_scan(),
         expected_alerts=2,
-        description="60 distinct ports probed → HIGH then CRITICAL.",
+        description="60 distinct ports probed -> HIGH then CRITICAL.",
     ),
     "unusual_ip": Scenario(
         name="unusual_ip",
         events=_unusual_ip(),
         expected_alerts=1,
-        description="Bootstrap on one IP, single login from a new one → LOW.",
+        description="Bootstrap on one IP, single login from a new one -> LOW.",
     ),
     "mixed": Scenario(
         name="mixed",
@@ -192,23 +193,25 @@ def _payload(ev: ScriptedEvent, ts: datetime) -> dict:
     return body
 
 
-async def _send_one(
-    client: httpx.AsyncClient, url: str, ev: ScriptedEvent, ts: datetime
-) -> None:
+def _send_one(url: str, ev: ScriptedEvent, ts: datetime) -> None:
+    data = json.dumps(_payload(ev, ts)).encode()
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
     try:
-        resp = await client.post(url, json=_payload(ev, ts))
-        if resp.status_code >= 300:
-            print(f"  ! {resp.status_code} {resp.text[:120]}")
-    except httpx.HTTPError as exc:  # noqa: PERF203
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status >= 300:
+                print(f"  ! {resp.status}")
+    except urllib.error.HTTPError as exc:
+        print(f"  ! {exc.code} {exc.read(120)}")
+    except OSError as exc:
         print(f"  ! request failed: {exc}")
 
 
-async def run_scenario(scenario: Scenario, target_url: str, speed: float) -> None:
+def run_scenario(scenario: Scenario, target_url: str, speed: float) -> None:
     if speed <= 0:
         raise ValueError("--speed must be positive")
 
     url = target_url.rstrip("/") + "/api/v1/log"
-    start_wall = asyncio.get_event_loop().time()
+    start_wall = time.monotonic()
     start_ts = datetime.now(timezone.utc)
 
     print(
@@ -217,17 +220,14 @@ async def run_scenario(scenario: Scenario, target_url: str, speed: float) -> Non
     )
     print(f"[generate_logs] {scenario.description}")
 
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        tasks: list[asyncio.Task] = []
-        for ev in scenario.events:
-            wait = (ev.offset_seconds / speed) - (asyncio.get_event_loop().time() - start_wall)
-            if wait > 0:
-                await asyncio.sleep(wait)
-            event_ts = start_ts + timedelta(seconds=ev.offset_seconds)
-            tasks.append(asyncio.create_task(_send_one(client, url, ev, event_ts)))
-        await asyncio.gather(*tasks)
+    for ev in scenario.events:
+        wait = (ev.offset_seconds / speed) - (time.monotonic() - start_wall)
+        if wait > 0:
+            time.sleep(wait)
+        event_ts = start_ts + timedelta(seconds=ev.offset_seconds)
+        _send_one(url, ev, event_ts)
 
-    elapsed = asyncio.get_event_loop().time() - start_wall
+    elapsed = time.monotonic() - start_wall
     print(
         f"[generate_logs] Sent {len(scenario.events)} events over "
         f"{elapsed:.1f}s. Expected {scenario.expected_alerts} alerts."
@@ -262,7 +262,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     scenario = SCENARIOS[args.scenario]
-    asyncio.run(run_scenario(scenario, args.target_url, args.speed))
+    run_scenario(scenario, args.target_url, args.speed)
 
 
 if __name__ == "__main__":
