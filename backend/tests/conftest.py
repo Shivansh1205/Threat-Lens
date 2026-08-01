@@ -18,9 +18,26 @@ from sqlalchemy.pool import StaticPool
 # would otherwise rebind the name ``app`` and shadow the FastAPI instance.
 import app.models  # noqa: F401
 
+from app.ai import chatbot as chatbot_module
 from app.database import Base, get_db
 from app.detection.registry import reset_registry
 from app.main import app as fastapi_app
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Restrict anyio's pytest plugin to the asyncio backend.
+
+    anyio (a transitive dependency of fastapi/httpx/starlette — already
+    installed, no new package added) ships a pytest plugin that lets
+    ``async def`` tests be marked ``@pytest.mark.anyio`` and run directly,
+    without adding pytest-asyncio. Left at its default, it parametrizes
+    every such test across both "asyncio" and "trio" backends; trio isn't
+    installed in this project, so without this override every async test
+    would fail on the trio parametrization. Restricting to "asyncio" here
+    matches what the app itself actually runs on.
+    """
+    return "asyncio"
 
 
 @pytest.fixture(autouse=True)
@@ -33,6 +50,16 @@ def _fresh_detector_state() -> Generator[None, None, None]:
     reset_registry()
     yield
     reset_registry()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_chatbot_history() -> Generator[None, None, None]:
+    """Wipe the chatbot's module-level conversation history between tests —
+    same rationale as ``_fresh_detector_state`` above.
+    """
+    chatbot_module._conversation_history.clear()
+    yield
+    chatbot_module._conversation_history.clear()
 
 
 @pytest.fixture

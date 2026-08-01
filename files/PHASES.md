@@ -102,8 +102,12 @@ For each phase: **goal**, **exit criteria** (how we know it's done), **out of sc
 - Multi-turn memory beyond the current session.
 
 **Open questions**
-- Latency budget for LLM calls — target under 3s per alert. Currently unmeasured.
-- Fallback behavior when Ollama is down? *(Current plan: mark explanation as "pending", retry, don't block the alert.)*
+- Latency budget for LLM calls — target under 3s per alert. Currently unmeasured against a real Ollama instance — all automated tests mock the LLM boundary, by design (see below), so this needs a manual pass with Ollama actually running.
+- Fallback behavior when Ollama is down? *(Resolved: explanation/mitigation_steps stay NULL — no "pending" placeholder state was added. The alert is fully usable without an explanation; GET /api/v1/alerts just shows null fields until/unless a later Ollama call succeeds. No retry loop exists yet — see follow-up below.)*
+
+**Implementation notes (this diverges slightly from "cached per alert_id to avoid re-calling the model" above — worth flagging):** explanations are not "cached" in the sense of a cache with eviction/invalidation; they're generated exactly once, opportunistically, via a `BackgroundTasks` job scheduled at ingestion time (`POST /api/v1/log` schedules `generate_explanation_task`, never calls the LLM inline — see `app/api/logs.py` and `app/ai/explainability.py`). If that one attempt fails (Ollama down, timeout, unparseable response), the alert simply stays unexplained forever — there is no retry, scheduled or otherwise. A TODO in `explainability.py` flags retry-with-backoff as a future improvement; a real task queue (Celery/arq) would be the natural place to add it, rather than bolting retry logic onto `BackgroundTasks`.
+
+**Follow-up (flagged, not built):** no retry logic for failed/timed-out explanation generation. A transient Ollama hiccup at the moment an alert is created means that alert never gets an explanation unless something re-triggers generation manually. Named as a Phase 6.5+/task-queue follow-up.
 
 ---
 
@@ -181,7 +185,7 @@ Not part of the project, but worth capturing so we don't lose them:
 
 ## Current position
 
-> **We are past Phase 4 (dynamic risk scoring), about to start Phase 5 (AI-assisted explainability).**
-> Recently completed: real detection engine (Phase 3) with brute-force/port-scan/unusual-IP rules, per-user behavioral profiling (BehaviorProfiler/BehaviorProfile), a concurrency-safety fix for the two stateful detectors, and dynamic risk scoring — `RiskScorer` now combines each detector's raw score with the user's behavioral deviation_score into a final, risk-adjusted score/severity (both preserved on `Alert` via raw_score/raw_severity vs. score/severity), plus a rolling per-user `user_risk_score` surfaced via `GET /api/v1/users/high-risk`.
-> Currently working on: nothing yet — Phase 5 (LLM explanations via Ollama/Mistral) has not been started.
-> Blockers: none. Known follow-up: `user_risk_score` decay is currently per-alert-event only, not per-elapsed-time — see the note under Phase 4 above.
+> **We are past Phase 5 (AI-assisted explainability), about to start Phase 6 (live dashboard & WebSocket delivery).**
+> Recently completed: real detection engine (Phase 3), per-user behavioral profiling (Phase 4), dynamic risk scoring with `RiskScorer` (Phase 4's "dynamic risk scoring" section) combining each detector's raw score with behavioral deviation into a final adjusted score/severity plus a rolling per-user `user_risk_score` (`GET /api/v1/users/high-risk`), and now AI-assisted explainability — every alert gets an LLM-generated explanation + constrained mitigation checklist via a local Ollama/Mistral call, generated out-of-band by a `BackgroundTasks` job so ingestion latency never depends on the LLM, plus a retrieval-augmented `POST /api/v1/chat` chatbot grounded on recent alerts. Both degrade gracefully (NULL explanation / honest fallback message) when Ollama is unreachable, slow, or returns something unparseable — no crashes, no fabricated answers.
+> Currently working on: nothing yet — Phase 6 (WebSockets, live dashboard) has not been started. Frontend is still the Phase 2 polling-based `AlertList`.
+> Blockers: none. Known follow-ups: `user_risk_score` decay is per-alert-event only, not per-elapsed-time (see Phase 4 note); explanation generation has no retry logic — a failed/timed-out attempt leaves an alert unexplained permanently rather than retrying (see Phase 5 note).

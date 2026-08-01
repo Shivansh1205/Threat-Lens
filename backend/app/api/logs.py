@@ -9,13 +9,14 @@ and detection is deliberately skipped (see PHASES.md open question for Phase
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.ai.explainability import generate_explanation_task
 from app.config import get_settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.detection.registry import get_registry
 from app.models.log_event import LogEvent
 from app.models.user import User
@@ -33,7 +34,11 @@ class LogIngestResult(BaseModel):
 
 
 @router.post("/log", status_code=status.HTTP_201_CREATED, response_model=LogIngestResult)
-def ingest_log(payload: LogEventIn, db: Session = Depends(get_db)) -> LogIngestResult:
+def ingest_log(
+    payload: LogEventIn,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> LogIngestResult:
     now = datetime.now(timezone.utc)
 
     # 1. Upsert the user — ON CONFLICT handles concurrent inserts safely.
@@ -116,5 +121,23 @@ def ingest_log(payload: LogEventIn, db: Session = Depends(get_db)) -> LogIngestR
     # scores), and the profile (deviation_score, user_risk_score, known_ips,
     # EMAs) all land together, even when no alerts fired.
     db.commit()
+
+    # 6. Schedule explanation generation for each new alert — AFTER the
+    # response would be considered complete, never inline. Alerts are
+    # persisted above with explanation=NULL/mitigation_steps=NULL; a
+    # BackgroundTasks job (Starlette's, no new dependency) calls the LLM and
+    # updates the row once it's done, which can take several seconds. Doing
+    # this synchronously here would make ingestion latency depend on
+    # Ollama's response time — under concurrent load (e.g. the port_scan
+    # scenario's 60 near-simultaneous events) that's exactly the kind of
+    # coupling that caused the connection-pool exhaustion problems in
+    # earlier phases, just worse. GET /api/v1/alerts legitimately returning
+    # explanation=null for a very recent alert is expected, not a bug.
+    #
+    # A fresh session is created inside the task via SessionLocal (passed as
+    # a factory, not an instance) rather than reusing `db` — this request's
+    # session may already be closed by the time the background task runs.
+    for alert in alerts:
+        background_tasks.add_task(generate_explanation_task, alert.id, SessionLocal)
 
     return LogIngestResult(event_id=event.id, alert_ids=[a.id for a in alerts])

@@ -7,7 +7,7 @@ Phase 3.
 
 from fastapi import FastAPI
 
-from app.api import alerts, logs, users
+from app.api import alerts, chat, logs, users
 from app.config import get_settings
 
 settings = get_settings()
@@ -17,6 +17,7 @@ app = FastAPI(title=settings.APP_NAME)
 app.include_router(logs.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
 
 
 @app.get("/health")

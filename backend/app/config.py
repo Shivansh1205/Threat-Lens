@@ -30,9 +30,15 @@ class Settings(BaseSettings):
     # --- Auth ---
     JWT_SECRET: str = "change-me"
 
-    # --- LLM / explainability layer (Phase 5) ---
+    # --- LLM / explainability layer (Phase 6) ---
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "mistral"
+    # Strict timeout for any single Ollama call (explanation generation or
+    # chatbot reply). Local 7B-class models on modest hardware can take
+    # several seconds; if this is exceeded, the caller treats it as a
+    # failure and degrades gracefully (see app/ai/ollama_client.py) rather
+    # than hanging the background task or the chat request indefinitely.
+    LLM_TIMEOUT_SECONDS: float = 15.0
 
     # --- Detection thresholds (Phase 3) ---
     # Brute-force login detection: sliding window keyed by user_id.
