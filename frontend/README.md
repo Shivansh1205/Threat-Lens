@@ -1,16 +1,45 @@
-# React + Vite
+# ThreatLens — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 18 + Vite 5 dashboard for the ThreatLens intrusion detection platform.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+# Install dependencies
+npm install --legacy-peer-deps
 
-## React Compiler
+# Copy environment file and set backend URL
+cp .env.example .env
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+`.env` must contain:
 
-## Expanding the Oxlint configuration
+```
+VITE_API_URL=http://localhost:8002
+VITE_WS_URL=ws://localhost:8002/ws/alerts
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+> Vite does NOT hot-reload `.env` changes. Restart `npm run dev` after editing it.
+
+## Commands
+
+```bash
+# Start dev server (http://localhost:5173)
+npm run dev
+
+# Production build
+npm run build
+
+# Preview production build locally
+npm run preview
+
+# Lint
+npm run lint
+```
+
+## Notes
+
+- The dashboard connects to the backend WebSocket at `VITE_WS_URL` for live alert push.
+- If the connection status shows "Disconnected", check that the backend is running on the correct port.
+- The High-Risk Users panel only shows users who have triggered at least one alert (risk score > 0).
+  Run `python scripts/flood_users.py` from the repo root to populate it with test data.
