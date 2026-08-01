@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     # before we start flagging new IPs.
     UNUSUAL_IP_BOOTSTRAP_COUNT: int = 3
 
+    # --- Behavior profiling (Phase 4) ---
+    # Smoothing factor for every EMA computation in BehaviorProfiler (login
+    # hour, login-hour variance, days-between-logins, session duration). One
+    # alpha for all of them, on purpose — don't invent per-metric alphas.
+    EMA_ALPHA: float = 0.05
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -4,8 +4,15 @@ Eviction uses **event timestamps**, not wall-clock time — this is what makes
 detectors deterministic and testable. Backed by a ``collections.deque`` for
 amortised-O(1) append + left-pop.
 
-Not thread-safe. Phase 3 assumes a single-process, single-worker uvicorn; a
-Redis-backed replacement is a Phase 6+ concern for horizontal scaling.
+``SlidingWindow`` itself is still not thread-safe — it has no lock of its own.
+That's fine because every caller that mutates a window from multiple threads
+(``BruteForceDetector``, ``PortScanDetector``) wraps its own read-decide-write
+sequence, including all window access, in a lock at the detector level (see
+those modules' docstrings). If you add a new caller that touches a shared
+``SlidingWindow`` instance from more than one thread, it is responsible for
+its own synchronization — this class won't protect you. A Redis-backed
+replacement remains a Phase 6+ concern for horizontal (multi-process) scaling;
+the locks added in this phase only cover concurrency *within* one process.
 
 Timestamps are captured at ``add()`` time and stored alongside the event, so
 comparisons don't depend on later ORM refreshes (SQLite in particular strips

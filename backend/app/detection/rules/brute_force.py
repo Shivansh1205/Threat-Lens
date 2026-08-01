@@ -7,9 +7,21 @@ the highest new threshold that call crossed. If a ``LOGIN_SUCCESS`` arrives
 while a burst of failures is still in the window, emits a separate
 CRITICAL ``brute_force_success`` candidate (the "attack succeeded" signal) and
 clears the state.
+
+Thread-safety: ``check()`` is called from Starlette's threadpool — FastAPI
+runs this (sync) endpoint's request handling on worker threads, and
+``DetectorRegistry`` holds one shared instance of this detector for the whole
+process (see registry.py). Without synchronization, two concurrent requests
+for the same user_id can both read ``last_emitted`` before either writes it,
+producing duplicate alerts at the same threshold (or worse: interleaved
+writes to the same SlidingWindow's deque corrupting the count). A single
+``threading.Lock`` around the whole read-decide-write section in ``check()``
+fixes this — see the lock discussion below.
 """
 
 from __future__ import annotations
+
+import threading
 
 from sqlalchemy.orm import Session
 
@@ -28,15 +40,31 @@ class BruteForceDetector(Detector):
         self._windows: dict[str, SlidingWindow] = {}
         self._last_emitted: dict[str, int] = {}
         self._settings = get_settings()
+        # One global lock for this detector instance, not one lock per
+        # user_id. Simpler and correct: check() does a handful of dict/deque
+        # operations per call (no I/O, no DB access — db is unused here), so
+        # serializing all calls to this detector process-wide is not a
+        # meaningful bottleneck at this project's scale. A per-key locking
+        # scheme (e.g. a dict of locks keyed by user_id) would let different
+        # users' requests run fully in parallel, but adds real complexity
+        # (locks-for-locks bookkeeping, cleanup of stale per-key locks) for a
+        # win that doesn't matter until this is under far heavier load than
+        # a demo/coursework deployment sees.
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ core
 
     def check(self, event: LogEvent, db: Session) -> list[AlertCandidate]:
-        if event.event_type == EventType.LOGIN_FAILURE:
-            return self._on_failure(event)
-        if event.event_type == EventType.LOGIN_SUCCESS:
-            return self._on_success(event)
-        return []
+        # Locked for the whole dispatch: both _on_failure and _on_success read
+        # and mutate self._windows / self._last_emitted, and must do so
+        # atomically with respect to other threads calling check() for the
+        # same (or a different) user_id.
+        with self._lock:
+            if event.event_type == EventType.LOGIN_FAILURE:
+                return self._on_failure(event)
+            if event.event_type == EventType.LOGIN_SUCCESS:
+                return self._on_success(event)
+            return []
 
     # -------------------------------------------------------------- handlers
 

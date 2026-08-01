@@ -4,10 +4,16 @@ Fires when a single source IP touches many *distinct* ports in a short
 window (HIGH at 15+, CRITICAL at 50+). Repeated access to the *same* port
 doesn't count — the whole point of a scan is breadth. Emits one candidate per
 event, at the highest new threshold that call crossed.
+
+Thread-safety: same situation as BruteForceDetector (see its module
+docstring) — ``check()`` runs on Starlette's threadpool against one shared
+detector instance for the whole process. A single ``threading.Lock`` guards
+the read-decide-write section per call.
 """
 
 from __future__ import annotations
 
+import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -49,6 +55,10 @@ class PortScanDetector(Detector):
         self._windows: dict[str, deque[_PortSnap]] = {}
         self._last_emitted: dict[str, int] = {}
         self._settings = get_settings()
+        # One global lock for this detector instance — see BruteForceDetector's
+        # module docstring for why a global lock (vs. per-key) is the right
+        # call here.
+        self._lock = threading.Lock()
 
     def check(self, event: LogEvent, db: Session) -> list[AlertCandidate]:
         if event.event_type != EventType.PORT_ACCESS:
@@ -60,21 +70,29 @@ class PortScanDetector(Detector):
 
         s = self._settings
         snap = _PortSnap(event)  # snapshot all needed values before any commit
-        window = self._windows.setdefault(event.ip, deque())
-        window.append(snap)
-        self._evict(window, snap.ts, s.PORT_SCAN_WINDOW_SECONDS)
 
-        distinct = len({sn.port for sn in window})
-        last = self._last_emitted.get(event.ip, 0)
+        # Locked for the whole read-decide-write sequence: window mutation,
+        # distinct-count read, and the last_emitted threshold check/update
+        # all need to happen atomically with respect to other threads.
+        with self._lock:
+            window = self._windows.setdefault(event.ip, deque())
+            window.append(snap)
+            self._evict(window, snap.ts, s.PORT_SCAN_WINDOW_SECONDS)
 
-        if distinct >= s.PORT_SCAN_CRITICAL_THRESHOLD and last < s.PORT_SCAN_CRITICAL_THRESHOLD:
-            self._last_emitted[event.ip] = s.PORT_SCAN_CRITICAL_THRESHOLD
-            return [self._candidate(snap, Severity.CRITICAL, 95, distinct)]
-        if distinct >= s.PORT_SCAN_HIGH_THRESHOLD and last < s.PORT_SCAN_HIGH_THRESHOLD:
-            self._last_emitted[event.ip] = s.PORT_SCAN_HIGH_THRESHOLD
-            return [self._candidate(snap, Severity.HIGH, 75, distinct)]
+            distinct = len({sn.port for sn in window})
+            last = self._last_emitted.get(event.ip, 0)
 
-        return []
+            if (
+                distinct >= s.PORT_SCAN_CRITICAL_THRESHOLD
+                and last < s.PORT_SCAN_CRITICAL_THRESHOLD
+            ):
+                self._last_emitted[event.ip] = s.PORT_SCAN_CRITICAL_THRESHOLD
+                return [self._candidate(snap, Severity.CRITICAL, 95, distinct)]
+            if distinct >= s.PORT_SCAN_HIGH_THRESHOLD and last < s.PORT_SCAN_HIGH_THRESHOLD:
+                self._last_emitted[event.ip] = s.PORT_SCAN_HIGH_THRESHOLD
+                return [self._candidate(snap, Severity.HIGH, 75, distinct)]
+
+            return []
 
     @staticmethod
     def _evict(window: deque[_PortSnap], anchor: datetime, window_seconds: int) -> None:
