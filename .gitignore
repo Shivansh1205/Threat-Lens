@@ -36,3 +36,7 @@ backend/uvicorn.log
 verify_portscan.py
 verify_output.txt
 backend/payload.json
+
+# --- Documents ---
+*.pdf
+*.pptx
