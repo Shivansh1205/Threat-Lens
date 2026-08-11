@@ -110,7 +110,14 @@ def test_stub_detector_not_registered() -> None:
     from app.detection.registry import get_registry
 
     names = {d.name() for d in get_registry().detectors}
-    assert names == {"BruteForceDetector", "PortScanDetector", "UnusualIpDetector"}
+    assert names == {
+        "BruteForceDetector",
+        "PortScanDetector",
+        "UnusualIpDetector",
+        "RequestRateDetector",
+        "PathProbeDetector",
+        "ServerErrorSpikeDetector",
+    }
 
 
 def test_port_scan_60_events_no_crash_two_alerts(db_session: Session) -> None:

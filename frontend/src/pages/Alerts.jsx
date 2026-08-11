@@ -3,13 +3,14 @@ import AlertsTable from "../components/AlertsTable/AlertsTable";
 import PageLayout from "../components/PageLayout/PageLayout";
 import { SEVERITY_ORDER } from "../constants/severity";
 import { useAlertsQuery } from "../hooks/useAlertsQuery";
+import { THREAT_TYPES } from "../constants/threatTypes";
 
 // Matches this project's four detectors (detection/rules/*.py) — see
 // ARCHITECTURE.md's Detection & profiling section. A fixed list rather than
 // deriving options purely from loaded data, so the dropdown still offers
 // every real type even when the current filtered/paginated result set
 // happens not to contain one of them.
-const ALERT_TYPES = ["brute_force", "brute_force_success", "port_scan", "unusual_ip"];
+const ALERT_TYPES = THREAT_TYPES.map((type) => type.value);
 
 const RESOLVED_OPTIONS = [
   { label: "All", value: "" },

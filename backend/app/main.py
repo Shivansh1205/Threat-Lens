@@ -24,9 +24,21 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, alerts, chat, logs, users, websocket
+from app.api import (
+    admin,
+    alerts,
+    chat,
+    collector,
+    logs,
+    metrics,
+    reports,
+    sources,
+    users,
+    websocket,
+)
 from app.config import get_settings
 from app.database import SessionLocal
+from app.detection.settings import load_persisted_thresholds
 from app.realtime.websocket_manager import get_ws_manager
 from app.scoring.decay_job import run_decay_pass
 
@@ -79,6 +91,22 @@ def _run_decay_job() -> None:
         db.close()
 
 
+def _load_detection_settings() -> None:
+    """Load persisted detector overrides before accepting events."""
+    db = _decay_db_session_factory()
+    try:
+        values, record = load_persisted_thresholds(db)
+        logger.info(
+            "Detection settings loaded (overridden=%s, brute_force_medium=%d)",
+            record is not None,
+            values.brute_force.medium_threshold,
+        )
+    except Exception:  # noqa: BLE001 - startup retains safe environment defaults
+        logger.exception("Could not load persisted detection settings; using defaults")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Runs on the loop uvicorn actually serves requests on. Async endpoints
@@ -86,6 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # directly on this loop; sync endpoints run on a threadpool that hands
     # work back to this same loop via schedule_broadcast().
     get_ws_manager().set_loop(asyncio.get_running_loop())
+    _load_detection_settings()
 
     # Time-based user_risk_score decay (see app/scoring/decay_job.py).
     # Interval trigger rather than a fixed wall-clock time (e.g. "run at
@@ -144,6 +173,10 @@ app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(collector.router, prefix="/api/v1")
+app.include_router(sources.router, prefix="/api/v1")
+app.include_router(metrics.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
 app.include_router(websocket.router)  # /ws/alerts — no /api/v1 prefix, see module docstring
 
 

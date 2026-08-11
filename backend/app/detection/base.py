@@ -12,13 +12,17 @@ control in a single place.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.models.log_event import LogEvent
 from app.schemas.common import Severity
+
+if TYPE_CHECKING:
+    from app.detection.settings import DetectionThresholds
 
 
 @dataclass
@@ -30,13 +34,19 @@ class AlertCandidate:
     score: int
     message: str
     triggered_by_event_id: UUID
+    evidence: dict = field(default_factory=dict)
 
 
 class Detector(ABC):
     """Base class for every rule-based detector."""
 
     @abstractmethod
-    def check(self, event: LogEvent, db: Session) -> list[AlertCandidate]:
+    def check(
+        self,
+        event: LogEvent,
+        db: Session,
+        thresholds: DetectionThresholds | None = None,
+    ) -> list[AlertCandidate]:
         """Inspect ``event`` and return zero or more candidates."""
 
     def name(self) -> str:

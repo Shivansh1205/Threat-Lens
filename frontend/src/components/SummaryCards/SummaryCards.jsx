@@ -21,7 +21,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
  *   back that), labeled with a subtitle to make the scope clear.
  * - Suspicious Activity: loaded alerts with severity HIGH or CRITICAL.
  */
-export default function SummaryCards({ alerts }) {
+export default function SummaryCards({ alerts, summary }) {
   const now = Date.now();
   const last24h = alerts.filter((a) => now - new Date(a.created_at).getTime() <= ONE_DAY_MS);
   const active = alerts.filter((a) => !a.resolved);
@@ -32,28 +32,28 @@ export default function SummaryCards({ alerts }) {
     {
       label: "Total Alerts (24h)",
       hint: "in current feed",
-      value: last24h.length,
+      value: summary?.alerts_24h ?? last24h.length,
       icon: AlertTriangle,
       accent: "text-sky-400",
     },
     {
       label: "Active Threats",
       hint: "unresolved, in feed",
-      value: active.length,
+      value: summary?.active_threats ?? active.length,
       icon: ShieldAlert,
       accent: "text-red-400",
     },
     {
       label: "Total Users",
       hint: "distinct, in feed",
-      value: distinctUsers.size,
+      value: summary?.total_users ?? distinctUsers.size,
       icon: Users,
       accent: "text-emerald-400",
     },
     {
       label: "Suspicious Activity",
       hint: "HIGH + CRITICAL",
-      value: suspicious.length,
+      value: summary?.high_critical_24h ?? suspicious.length,
       icon: Activity,
       accent: "text-amber-400",
     },
@@ -64,13 +64,13 @@ export default function SummaryCards({ alerts }) {
       {cards.map(({ label, hint, value, icon: Icon, accent }) => (
         <div
           key={label}
-          className="rounded-xl border border-white/5 bg-slate-900/60 p-4 shadow-lg shadow-black/20"
+          className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/5 dark:bg-slate-900/60 dark:shadow-lg dark:shadow-black/20"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</span>
             <Icon className={`h-4 w-4 ${accent}`} />
           </div>
-          <p className="mt-2 text-2xl font-semibold text-slate-50">{value}</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-50">{value}</p>
           <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p>
         </div>
       ))}

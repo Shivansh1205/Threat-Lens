@@ -55,6 +55,24 @@ class Settings(BaseSettings):
 
     # --- Auth ---
     JWT_SECRET: str = "change-me"
+    INGEST_API_KEY: str = "change-me-ingest"
+    ADMIN_API_KEY: str = "change-me-admin"
+    IP_HASH_SECRET: str = "change-me-ip-hash"
+    MAX_BATCH_SIZE: int = 250
+    MAX_EVENT_AGE_HOURS: int = 168
+    MAX_EVENT_FUTURE_SKEW_SECONDS: int = 300
+    SOURCE_STALE_SECONDS: int = 30
+
+    # Nginx access-log mapping. Comma-separated values are parsed by the
+    # validators below so the same syntax works in .env and Compose.
+    LOGIN_PATHS: Annotated[list[str], NoDecode] = ["/login"]
+
+    @field_validator("LOGIN_PATHS", mode="before")
+    @classmethod
+    def _split_login_paths(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
 
     # --- LLM / explainability layer (Phase 6) ---
     OLLAMA_HOST: str = "http://localhost:11434"
@@ -81,6 +99,17 @@ class Settings(BaseSettings):
     # Unusual-IP detection: how many login events establish the known-IP set
     # before we start flagging new IPs.
     UNUSUAL_IP_BOOTSTRAP_COUNT: int = 3
+
+    # Web access-log detection thresholds.
+    REQUEST_RATE_WINDOW_SECONDS: int = 10
+    REQUEST_RATE_HIGH_THRESHOLD: int = 30
+    REQUEST_RATE_CRITICAL_THRESHOLD: int = 75
+    PATH_PROBE_WINDOW_SECONDS: int = 60
+    PATH_PROBE_HIGH_THRESHOLD: int = 8
+    PATH_PROBE_CRITICAL_THRESHOLD: int = 20
+    SERVER_ERROR_WINDOW_SECONDS: int = 60
+    SERVER_ERROR_HIGH_THRESHOLD: int = 5
+    SERVER_ERROR_CRITICAL_THRESHOLD: int = 15
 
     # --- Behavior profiling (Phase 4) ---
     # Smoothing factor for every EMA computation in BehaviorProfiler (login

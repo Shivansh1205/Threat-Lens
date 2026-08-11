@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block title %}Attack Lab · Sentinel Portal{% endblock %}
+{% block content %}
+<section class="lab-head"><span class="eyebrow">LOCAL DEMO MODE</span><h1>Safe Attack Lab</h1><p>Each control sends bounded, genuine requests through Nginx. It never creates ThreatLens alerts directly.</p></section>
+<section class="attack-grid">
+  <article><h2>Brute-force login</h2><p>Six invalid logins followed by a valid one.</p><button class="button attack" data-scenario="brute">Run scenario</button></article>
+  <article><h2>Request flood</h2><p>Eighty API requests in a short burst.</p><button class="button attack" data-scenario="flood">Run scenario</button></article>
+  <article><h2>Path probing</h2><p>Twenty-two distinct missing or sensitive-looking paths.</p><button class="button attack" data-scenario="probe">Run scenario</button></article>
+  <article><h2>Server-error spike</h2><p>Sixteen controlled HTTP 500 responses.</p><button class="button attack" data-scenario="errors">Run scenario</button></article>
+  <article><h2>Combined demonstration</h2><p>Runs every scenario sequentially.</p><button class="button attack" data-scenario="combined">Run all</button></article>
+</section>
+<section class="card"><h2>Run them manually</h2><ul><li>Submit incorrect credentials on the login page at least five times.</li><li>Open distinct nonexistent URLs such as <code>/wp-admin</code> and <code>/.env</code>.</li><li>Refresh <code>/demo/error</code> repeatedly.</li><li>Use DevTools or curl to request <code>/api/data</code> rapidly.</li></ul></section>
+<div id="run-status" class="status" aria-live="polite">Ready.</div>
+{% endblock %}{% block scripts %}<script src="/static/attack-lab.js"></script>{% endblock %}

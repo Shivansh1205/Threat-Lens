@@ -63,6 +63,15 @@ function AlertRow({ alert }) {
           Analyzing...
         </div>
       )}
+      {alert.evidence && (
+        <div className="mt-2 flex flex-wrap gap-2 pl-7 text-[11px] text-slate-400">
+          {alert.evidence.method && <span>{alert.evidence.method}</span>}
+          {alert.evidence.endpoint && <span className="max-w-xs truncate text-sky-300">{alert.evidence.endpoint}</span>}
+          {alert.evidence.http_status && <span>HTTP {alert.evidence.http_status}</span>}
+          {alert.evidence.ip && <span>{alert.evidence.ip}</span>}
+          {alert.evidence.count && <span>{alert.evidence.count} events / {alert.evidence.window_seconds}s</span>}
+        </div>
+      )}
     </li>
   );
 }
