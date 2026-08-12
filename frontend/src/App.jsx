@@ -10,15 +10,8 @@ import SettingsPage from "./pages/Settings";
 import ThreatFeed from "./pages/ThreatFeed";
 
 /**
- * Client-side routing via react-router-dom (added this phase — confirmed
- * with the user before adding, since it wasn't previously a dependency).
- * `ChatProvider` wraps everything above the routes so Dashboard's
- * `ChatWidget` and the full-page `Assistant` view share one conversation
- * (see context/ChatContext.jsx) regardless of which route is active.
- *
- * Threat Feed / Reports / Settings have no route yet — the Sidebar keeps
- * them as visually-disabled placeholders rather than linking to a page
- * that doesn't exist.
+ * ChatProvider sits above the routes so the dashboard widget and full Assistant
+ * page share one conversation while the user navigates between views.
  */
 export default function App() {
   return (

@@ -1,45 +1,47 @@
-# ThreatLens — Frontend
+# ThreatLens frontend
 
-React 18 + Vite 5 dashboard for the ThreatLens intrusion detection platform.
+React 18 and Vite 5 analyst dashboard for ThreatLens. For the complete monitored
+portal demonstration, use the root `compose.yaml` and [README](../README.md).
 
-## Setup
+## Local setup
 
-```bash
-# Install dependencies
-npm install --legacy-peer-deps
+Run the backend on port 8002, then:
 
-# Copy environment file and set backend URL
-cp .env.example .env
+```powershell
+npm install
+Copy-Item .env.example .env
+npm run dev
 ```
 
-`.env` must contain:
+On macOS or Linux, use `cp .env.example .env`. The environment file contains:
 
-```
+```dotenv
 VITE_API_URL=http://localhost:8002
 VITE_WS_URL=ws://localhost:8002/ws/alerts
 ```
 
-> Vite does NOT hot-reload `.env` changes. Restart `npm run dev` after editing it.
+Restart Vite after changing environment variables.
 
 ## Commands
 
-```bash
-# Start dev server (http://localhost:5173)
-npm run dev
-
-# Production build
-npm run build
-
-# Preview production build locally
-npm run preview
-
-# Lint
-npm run lint
+```powershell
+npm run dev      # development server on http://localhost:5173
+npm run build    # production build
+npm run preview  # preview the production build
+npm run lint     # Oxlint
+npm test         # Node utility tests
 ```
 
-## Notes
+## Application routes
 
-- The dashboard connects to the backend WebSocket at `VITE_WS_URL` for live alert push.
-- If the connection status shows "Disconnected", check that the backend is running on the correct port.
-- The High-Risk Users panel only shows users who have triggered at least one alert (risk score > 0).
-  Run `python scripts/flood_users.py` from the repo root to populate it with test data.
+- `/` - system overview and live alert dashboard
+- `/threat-feed` - filterable threat analytics
+- `/alerts` - alert list and resolution workflow
+- `/users` - high-risk ranking and behavior profiles
+- `/assistant` - alert-grounded AI assistant
+- `/reports` - filtered CSV reports
+- `/settings` - theme and protected detector limits
+
+The dashboard uses REST requests for authoritative state and `/ws/alerts` for live
+alert updates. If the connection indicator is disconnected, confirm the backend
+URL, WebSocket URL, and CORS configuration.

@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Complete local monitored-portal demonstration with Nginx JSON logging, durable
+  collector, source health, web-activity detectors, reports, runtime detection
+  settings, and Docker Compose orchestration.
+- Current setup, architecture, contribution, frontend, and project-description
+  documentation for the integrated demonstration.
 - Phase 2 skeleton scaffold: `backend/` FastAPI app package (`main.py` with `GET /health`, `config.py` via pydantic-settings, `database.py` SQLAlchemy engine/session), empty `models/`, `schemas/`, `detection/`, `profiling/`, `scoring/`, `ai/`, `api/`, `realtime/` packages, `tests/test_health.py`, hand-wired `alembic/` env (no migrations yet), `requirements.txt`, `.env.example`, `pyproject.toml` (black + ruff config).
 - `frontend/` scaffolded with Vite (`react` template); added `tailwindcss`/`postcss`/`autoprefixer` and `recharts`/`lucide-react` to `package.json` (not yet installed), Tailwind config wired into `src/index.css`, empty `src/components/`, `src/hooks/`, `src/context/`, `src/pages/` directories, `.env.example` (`VITE_API_URL`, `VITE_WS_URL`).
 - `scripts/generate_logs.py` and `scripts/seed_data.py` stubs (argparse `--scenario` on the log generator; both raise `NotImplementedError` pending Phase 3+).

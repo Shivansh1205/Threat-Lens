@@ -1,65 +1,79 @@
 # ThreatLens
 
-**Explainable and Context-Aware Log-Based Intrusion Detection and Response System**
+ThreatLens is an explainable, context-aware intrusion detection and response
+prototype. It collects structured application and Nginx access logs, detects
+suspicious behavior in real time, scores alerts using user context, and presents
+the results in a live analyst dashboard.
 
-A real-time cybersecurity monitoring platform that ingests structured logs, detects anomalies using rule-based and behavioral techniques, scores threats dynamically, and explains alerts in analyst-friendly language via an AI assistant.
+The repository includes a complete local demonstration: a monitored web portal,
+Nginx reverse proxy, durable log collector, FastAPI detection backend, PostgreSQL,
+React dashboard, and an optional Ollama/Mistral explanation layer.
 
-## Complete monitored-website demo
+## What it detects
 
-The repository now includes a safe generic user portal, an Nginx reverse proxy,
-a durable JSON-log collector, and web-specific detectors. The Attack Lab sends
-real HTTP requests through Nginx; it never writes alerts directly.
+- Brute-force login attempts and a successful login after repeated failures
+- Port scans in directly ingested network events
+- Logins from unusual IP addresses after a user baseline is established
+- Excessive HTTP request rates
+- Probing of many distinct missing paths
+- Repeated HTTP 5xx responses
 
-### Start everything
+Detector windows and thresholds can be changed at runtime from the Settings page.
+Overrides are validated, persisted in PostgreSQL, and applied without restarting
+the stack.
 
-```bash
-copy .env.example .env
-docker compose up --build
+## Quick start
+
+### Prerequisites
+
+- Docker Desktop with Docker Compose
+- Python 3.11+ only if you want to run the traffic scripts or backend tests
+- Node.js 18+ only for standalone frontend development
+
+Copy the environment template and start the stack:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build -d
 ```
+
+On macOS or Linux, use `cp .env.example .env` instead of `Copy-Item`.
 
 Open:
 
-- Demo portal: `http://localhost:8080`
-- Attack Lab: `http://localhost:8080/demo-controls`
-- ThreatLens dashboard: `http://localhost:5173`
-- API documentation: `http://localhost:8002/docs`
+| Service | URL |
+|---|---|
+| ThreatLens dashboard | <http://localhost:5173> |
+| Monitored demo portal | <http://localhost:8080> |
+| Attack Lab | <http://localhost:8080/demo-controls> |
+| API documentation | <http://localhost:8002/docs> |
 
-Demo accounts:
+Demo portal accounts:
 
-- Member: `alice` / `demo123`
-- Administrator: `admin` / `admin123`
+| Role | Username | Password |
+|---|---|---|
+| Member | `alice` | `demo123` |
+| Administrator | `admin` | `admin123` |
 
-For a shareable demo machine, replace every value in `.env` first. All ports
-bind to loopback by default and are not intended for public exposure.
+All published ports bind to `127.0.0.1`. The default credentials and secrets are
+for a local demonstration only. Replace every value in `.env` before using the
+stack on a shared machine.
 
-AI explanations are optional. Enable the local model after the main stack is
-running with:
+Check service health and follow logs with:
 
-```bash
-docker compose --profile ai up -d ollama
-docker compose exec ollama ollama pull mistral
+```powershell
+docker compose ps
+docker compose logs -f collector backend monitored-nginx
 ```
 
-Without it, detection and dashboards still work; recent alerts simply have no
-AI explanation and the assistant returns its availability fallback.
+See [RUN_COMMANDS.md](RUN_COMMANDS.md) for the short operations reference.
 
-### Configure detection limits
+## Generate monitored traffic
 
-Open `http://localhost:5173/settings` and unlock **Detection Limits** with the
-`ADMIN_API_KEY` value from the root `.env` file. The key is retained only for
-the current browser session. Administrators can change each detector's event
-window and severity thresholds without restarting the stack.
+The Attack Lab buttons and `scripts/demo_attacks.py` send bounded HTTP scenarios
+through Nginx. They do not insert events or alerts directly.
 
-Saved values are validated, persisted in PostgreSQL, and applied immediately.
-Saving or restoring defaults clears active in-memory detector windows so old
-events are never reinterpreted under new limits. The documented environment
-values remain the defaults until an override is saved.
-
-### Generate monitored attacks
-
-Use the buttons in the Attack Lab or run a bounded scenario manually:
-
-```bash
+```powershell
 python scripts/demo_attacks.py brute
 python scripts/demo_attacks.py flood
 python scripts/demo_attacks.py probe
@@ -67,380 +81,186 @@ python scripts/demo_attacks.py errors
 python scripts/demo_attacks.py combined
 ```
 
-The scenarios demonstrate login brute force, excessive request rate, distinct
-404 path probing, and repeated HTTP 500 responses. You can reproduce them by
-hand with the login form, browser refreshes, DevTools, curl, or an intercepting
-proxy pointed only at `localhost:8080`.
+The older structured-event generator is still useful for exercising login,
+port-scan, and unusual-IP detectors directly through the backend API:
 
-### Operate and reset
-
-```bash
-docker compose ps
-docker compose logs -f collector backend monitored-nginx
-docker compose down
-docker compose down -v
-```
-
-`docker compose down -v` permanently removes demo database, log, checkpoint,
-and optional Ollama volumes. Normal `docker compose down` preserves them.
-
-The collector starts at the end of a new log by default, checkpoints only
-delivered records, retries temporary failures, survives Nginx log rotation,
-hashes anonymous visitor identities, and removes query strings before storage.
-Access-log monitoring cannot see request bodies, application outcomes hidden
-behind HTTP 200 responses, or network scans that never reach Nginx.
-
----
-
-## Why ThreatLens?
-
-Traditional IDS tools depend on static signatures and produce raw, unfiltered alerts — leaving analysts overwhelmed with fatigue and blind to zero-day threats. ThreatLens addresses this with:
-
-- **Real-time detection** on continuously ingested logs (login events, IP activity, port scans, API calls).
-- **Behavioral profiling** that builds per-user baselines and flags deviations.
-- **Dynamic risk scoring** (0–100) that ranks alerts by severity, so analysts focus on what matters.
-- **Explainable AI layer** — every alert comes with a natural-language explanation and suggested mitigation, powered by a local LLM (Ollama + Mistral).
-- **Live dashboard** with WebSocket-driven updates, threat trends, high-risk user rankings, and an integrated chatbot.
-
----
-
-## Architecture at a glance
-
-```
-External Sources ──▶ Log Ingestion (FastAPI + Pydantic)
-                         │
-                         ▼
-                  Detection & Behavior Profiling
-                  (rules + sliding windows + baselines)
-                         │
-                         ▼
-                  Dynamic Risk Scoring (0–100)
-                         │
-                         ▼
-                  AI & Explainability Layer (Ollama/Mistral)
-                         │
-                         ▼
-             ┌───────────┴───────────┐
-             ▼                       ▼
-      WebSocket Push          Alert Storage (Postgres)
-             │
-             ▼
-      React + Vite Dashboard  ──▶  Analyst / Admin
-```
-
-See `ARCHITECTURE.md` for the full breakdown of layers and modules.
-
----
-
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Python 3, FastAPI |
-| Database | PostgreSQL 16 (Docker) |
-| Frontend | React 18 + Vite 5 |
-| Real-time | WebSocket |
-| LLM explainability | Ollama running Mistral |
-| Validation | Pydantic v2 |
-| Migrations | Alembic |
-| Testing | pytest + pytest-asyncio |
-
----
-
-## Prerequisites
-
-- Python 3.11+ (tested on 3.14 on Windows)
-- Node.js 18+
-- Docker Desktop (for the Postgres container)
-- Ollama (optional — only needed for AI explanations and the chatbot)
-
----
-
-## Installation
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/Shivansh1205/Threat-Lens.git ThreatLens
-cd ThreatLens
-```
-
-### 2. Start the database
-
-```bash
-# Pull and run Postgres 16 on port 5433
-# (5433 avoids conflicts with any native Postgres installation on 5432)
-docker run -d \
-  --name threatlens-db \
-  -e POSTGRES_PASSWORD=devpass \
-  -e POSTGRES_DB=threatlens \
-  -p 5433:5432 \
-  postgres:16
-
-# Verify it's accepting connections
-docker exec threatlens-db pg_isready -U postgres
-```
-
-> **Windows note:** use `127.0.0.1` not `localhost` in the DATABASE_URL.
-> Windows resolves `localhost` to `::1` (IPv6) which Docker doesn't bind.
-
-If the container already exists but is stopped:
-
-```bash
-docker start threatlens-db
-```
-
-### 3. Backend setup
-
-```bash
-cd backend
-
-# Create and activate a virtual environment
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy and configure environment
-cp .env.example .env
-```
-
-The `.env` file should contain:
-
-```
-DATABASE_URL=postgresql://postgres:devpass@127.0.0.1:5433/threatlens
-```
-
-Run database migrations:
-
-```bash
-python -m alembic upgrade head
-```
-
-### 4. Frontend setup
-
-```bash
-cd frontend
-
-# Install dependencies (--legacy-peer-deps required for recharts compatibility)
-npm install --legacy-peer-deps
-
-# Copy environment file
-cp .env.example .env
-```
-
-The `frontend/.env` file should contain:
-
-```
-VITE_API_URL=http://localhost:8002
-VITE_WS_URL=ws://localhost:8002/ws/alerts
-```
-
-### 5. Ollama (optional — AI explanations + chatbot)
-
-```bash
-ollama pull mistral
-ollama serve
-```
-
----
-
-## Running the app
-
-### Start the backend
-
-```bash
-cd backend
-python -m uvicorn app.main:app --reload --port 8002
-```
-
-> Ports 8000 and 8001 are commonly occupied on Windows. Use `--port 8002`.
-
-API docs available at: `http://localhost:8002/docs`
-
-### Start the frontend
-
-```bash
-cd frontend
-npm run dev
-```
-
-Dashboard available at: `http://localhost:5173`
-
----
-
-## Running tests
-
-All tests are in `backend/tests/`. Run from the `backend/` directory with the virtual environment active.
-
-```bash
-cd backend
-```
-
-Run the full test suite:
-
-```bash
-python -m pytest
-```
-
-Run with verbose output:
-
-```bash
-python -m pytest -v
-```
-
-Run a specific test file:
-
-```bash
-python -m pytest tests/test_detection/test_registry.py -v
-python -m pytest tests/test_alerts.py -v
-python -m pytest tests/test_alerts_resolve.py -v
-python -m pytest tests/test_users_profile.py -v
-```
-
-Run a specific test by name:
-
-```bash
-python -m pytest -k "test_port_scan_60_events_no_crash_two_alerts" -v
-```
-
-Run tests for a specific module group:
-
-```bash
-python -m pytest tests/test_detection/ -v
-python -m pytest tests/test_scoring/ -v
-python -m pytest tests/test_realtime/ -v
-```
-
-Run with coverage (if pytest-cov is installed):
-
-```bash
-python -m pytest --cov=app --cov-report=term-missing
-```
-
-> Tests use SQLite in-memory — no running Postgres or Docker required.
-
----
-
-## Generating test traffic
-
-Scripts live in `scripts/` and are run from the **repo root**.
-
-### Scenario-based log generator
-
-Sends scripted attack/normal traffic to the backend:
-
-```bash
-# Brute force attack (25 failures + 1 success -> 4 alerts)
-python scripts/generate_logs.py --scenario brute_force --speed 10 --target-url http://localhost:8002
-
-# Port scan (60 distinct ports -> HIGH + CRITICAL alerts)
-python scripts/generate_logs.py --scenario port_scan --speed 10 --target-url http://localhost:8002
-
-# Unusual IP (bootstrap 3 logins, then new IP -> LOW alert)
-python scripts/generate_logs.py --scenario unusual_ip --speed 10 --target-url http://localhost:8002
-
-# Normal baseline traffic (no alerts expected)
-python scripts/generate_logs.py --scenario normal --speed 10 --target-url http://localhost:8002
-
-# All scenarios combined across distinct users
+```powershell
 python scripts/generate_logs.py --scenario mixed --speed 10 --target-url http://localhost:8002
 ```
 
-`--speed` is a multiplier: `1` = real-time, `10` = 10x faster, `100` = near-instant.
+Only run the supplied scenarios against systems you own or are authorized to
+test. Their default targets are local services.
 
-### Flood 10 users (populate the High-Risk Users panel)
+## Optional AI explanations
 
-Sends 6 login failures + 1 success per user, triggering alerts for all 10:
+Detection, scoring, reporting, and the dashboard work without a language model.
+To enable alert explanations and the assistant with the Compose-managed Ollama
+service:
 
-```bash
-python scripts/flood_users.py
+```powershell
+docker compose --profile ai up -d ollama
+docker compose exec ollama ollama pull mistral
 ```
 
----
+Recent alerts can temporarily show no explanation while the background request is
+running. If Ollama is unavailable or times out, ingestion continues and the
+assistant returns an availability message.
 
-## Useful API endpoints
+## Detection settings
 
-All endpoints are prefixed with `/api/v1`. Full interactive docs at `/docs`.
+Open <http://localhost:5173/settings>, enter the `ADMIN_API_KEY` from the root
+`.env`, and unlock **Detection Limits**. The key is held in browser session
+storage, so it must be entered again in a new browser session.
 
-| Method | Endpoint | Description |
+Saving settings clears active in-memory detector windows to avoid interpreting old
+events under new limits. **Restore defaults** removes the database override and
+reloads the environment defaults from `backend/.env.example`.
+
+## Architecture
+
+```text
+Browser -> monitored Nginx -> demo portal
+              |
+              v
+        JSON access log -> collector -> authenticated batch API
+                                           |
+Direct structured events ------------------+
+                                           v
+                              validate and persist event
+                                           |
+                              profile -> detect -> score
+                                           |
+                              PostgreSQL alerts and metrics
+                                  |                  |
+                           WebSocket updates    background AI
+                                  |
+                                  v
+                             React dashboard
+```
+
+The collector checkpoints only records accepted by the backend, retries temporary
+failures, handles log rotation, removes query strings, and replaces anonymous
+visitor IPs with keyed hashes. Nginx access logs cannot reveal request bodies,
+application failures hidden behind HTTP 200 responses, or network traffic that
+never reaches the proxy.
+
+Detector windows and chat history are process-local. The current Compose topology
+runs one backend instance; scaling it horizontally would require shared state such
+as Redis.
+
+For component responsibilities and the event lifecycle, see
+[Architecture](files/ARCHITECTURE.md). A more detailed implementation narrative is
+available in [description.md](description.md).
+
+## Dashboard
+
+The React application includes:
+
+- Overview metrics, severity breakdowns, activity charts, source health, and live alerts
+- Filterable Threat Feed and Alerts pages
+- Per-user behavioral analytics and risk rankings
+- CSV report generation with time, severity, type, and resolution filters
+- Runtime detection settings protected by the admin API key
+- A shared AI assistant conversation and light/dark themes
+
+## API overview
+
+REST endpoints are under `/api/v1`; the WebSocket and health routes are not.
+Interactive request and response schemas are available at `/docs`.
+
+| Method | Endpoint | Purpose |
 |---|---|---|
-| `POST` | `/api/v1/log` | Ingest a log event |
-| `POST` | `/api/v1/events/batch` | Authenticated, idempotent collector ingestion |
-| `POST` | `/api/v1/sources/{id}/heartbeat` | Collector health and counters |
-| `GET` | `/api/v1/sources` | Monitoring source status |
-| `GET` | `/api/v1/metrics/summary` | Authoritative dashboard totals |
-| `GET` | `/api/v1/metrics/activity` | Time-bucketed alert activity |
-| `GET` | `/api/v1/alerts` | List alerts (supports `?severity=`, `?resolved=`, `?limit=`) |
-| `PATCH` | `/api/v1/alerts/{id}/resolve` | Mark an alert resolved |
-| `PATCH` | `/api/v1/alerts/{id}/unresolve` | Unmark resolved |
-| `GET` | `/api/v1/users/high-risk` | Users ranked by risk score |
-| `GET` | `/api/v1/users/{user_id}/profile` | Full behavioral profile for one user |
-| `POST` | `/api/v1/chat` | Send a message to the AI assistant |
-| `POST` | `/api/v1/admin/decay` | Manually trigger a risk-score decay pass |
-| `GET` | `/health` | Liveness check |
-| `WS` | `/ws/alerts` | WebSocket — live alert push |
+| `POST` | `/api/v1/log` | Ingest one structured event |
+| `POST` | `/api/v1/events/batch` | Idempotent collector ingestion (`X-ThreatLens-Key`) |
+| `POST` | `/api/v1/sources/{source_id}/heartbeat` | Update collector health and counters |
+| `GET` | `/api/v1/sources` | List monitoring-source status |
+| `GET` | `/api/v1/alerts` | Filter and list alerts |
+| `PATCH` | `/api/v1/alerts/{id}/resolve` | Resolve an alert |
+| `PATCH` | `/api/v1/alerts/{id}/unresolve` | Reopen an alert |
+| `GET` | `/api/v1/users/high-risk` | Rank users by rolling risk |
+| `GET` | `/api/v1/users/{user_id}/profile` | Read a behavioral profile |
+| `GET` | `/api/v1/metrics/summary` | Read dashboard totals |
+| `GET` | `/api/v1/metrics/activity` | Read alert activity buckets |
+| `GET` | `/api/v1/metrics/threats` | Read filtered threat analytics |
+| `GET` | `/api/v1/reports/alerts.csv` | Download a filtered alert report |
+| `POST` | `/api/v1/chat` | Ask the alert-grounded assistant |
+| `GET/PUT/DELETE` | `/api/v1/admin/detection-settings` | Manage detector limits (`X-ThreatLens-Admin-Key`) |
+| `POST` | `/api/v1/admin/decay-now` | Run risk decay (`X-ThreatLens-Admin-Key`) |
+| `GET` | `/health` | Backend liveness |
+| `WS` | `/ws/alerts` | Live alert stream |
 
----
+## Development and tests
+
+The fastest validation path does not require a running PostgreSQL instance because
+backend tests use SQLite databases created by the test fixtures.
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pytest
+python -m ruff check .
+```
+
+On macOS or Linux, activate with `source .venv/bin/activate`.
+
+Frontend validation:
+
+```powershell
+cd frontend
+npm install
+npm test
+npm run lint
+npm run build
+```
+
+Collector and demo-site tests:
+
+```powershell
+python -m pytest collector/test_collector.py demo_site/test_app.py
+```
+
+For local development workflows and contribution conventions, see
+[Contributing](files/CONTRIBUTING.md).
 
 ## Project layout
 
-```
-ThreatLens/
-├── backend/
-│   ├── app/
-│   │   ├── api/            # FastAPI routers (logs, alerts, users, chat, admin, websocket)
-│   │   ├── detection/      # Rule-based detectors + registry
-│   │   ├── scoring/        # Risk scorer + decay job
-│   │   ├── profiling/      # Behavior profiler
-│   │   ├── ai/             # Ollama client + explainability
-│   │   ├── realtime/       # WebSocket manager
-│   │   ├── models/         # SQLAlchemy ORM models
-│   │   ├── schemas/        # Pydantic schemas
-│   │   └── main.py         # App entrypoint + lifespan
-│   ├── alembic/            # DB migrations
-│   ├── tests/              # pytest test suite
-│   ├── .env.example
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/     # UI components
-│   │   ├── hooks/          # Data-fetching hooks
-│   │   ├── pages/          # Dashboard, Alerts, UserAnalytics, Assistant
-│   │   ├── context/        # ChatContext
-│   │   └── utils/
-│   ├── .env.example
-│   └── package.json
-├── scripts/
-│   ├── generate_logs.py    # Scenario-based traffic generator
-│   └── flood_users.py      # Multi-user flood for dashboard testing
-└── files/
-    ├── README.md           # You are here
-    ├── ARCHITECTURE.md
-    ├── PHASES.md
-    └── CHANGELOG.md
+```text
+backend/       FastAPI API, detectors, profiling, scoring, AI, and migrations
+collector/     Durable Nginx JSON-log tailer and authenticated batch client
+demo_site/     Safe Flask portal and browser-based Attack Lab
+frontend/      React 18 and Vite dashboard
+nginx/         Reverse-proxy and structured access-log configuration
+scripts/       Monitored HTTP and direct structured-event generators
+files/         Architecture, roadmap, changelog, and contribution docs
+compose.yaml   Complete local demonstration topology
 ```
 
----
+## Data reset
 
-## Team
+```powershell
+docker compose down
+```
 
-Final-year major project, Department of CSE, Bangalore Institute of Technology (2025–26).
+This stops services and preserves data. The following command also permanently
+deletes the PostgreSQL, Nginx log, collector checkpoint, and Ollama volumes:
 
-- **Abhinav Kumar Singh** — 1BI23CS011
-- **Anurag Patil** — 1BI23CS034
-- **Harshitha M P** — 1BI23CS091
-- **Shivansh Bhageria** — 1BI23CS194
+```powershell
+docker compose down -v
+```
 
-**Guide:** Dr. Hemavathi P, Professor, Department of CSE.
+## Team and license
 
----
+Final-year major project, Department of CSE, Bangalore Institute of Technology
+(2025-26).
 
-## License
+- Abhinav Kumar Singh - 1BI23CS011
+- Anurag Patil - 1BI23CS034
+- Harshitha M P - 1BI23CS091
+- Shivansh Bhageria - 1BI23CS194
 
-Academic / educational use only.
+Guide: Dr. Hemavathi P, Professor, Department of CSE.
+
+Academic and educational use only. No separate open-source license is currently
+included in the repository.
