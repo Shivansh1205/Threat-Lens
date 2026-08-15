@@ -45,6 +45,7 @@ class Alert(Base):
     )
     raw_score: Mapped[int] = mapped_column(Integer, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[dict | None] = mapped_column(JSONVariant, nullable=True)
 
     triggered_by_event_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("log_events.id"), nullable=True

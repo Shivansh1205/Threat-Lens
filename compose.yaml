@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: threatlens
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d threatlens"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    environment:
+      ENV: demo
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@postgres:5432/threatlens
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      INGEST_API_KEY: ${INGEST_API_KEY:-local-demo-ingest-key}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-local-demo-admin-key}
+      IP_HASH_SECRET: ${IP_HASH_SECRET:-local-demo-ip-hash-key}
+      OLLAMA_HOST: http://ollama:11434
+      LOGIN_PATHS: /login
+    ports:
+      - "127.0.0.1:8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  dashboard:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8002
+        VITE_WS_URL: ws://localhost:8002/ws/alerts
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  demo-site:
+    build: ./demo_site
+    environment:
+      DEMO_MODE: "true"
+      PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:-local-demo-session-secret}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  monitored-nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx-logs:/var/log/nginx
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      demo-site:
+        condition: service_healthy
+
+  collector:
+    build: ./collector
+    environment:
+      THREATLENS_API_URL: http://backend:8002
+      INGEST_API_KEY: ${INGEST_API_KEY:-local-demo-ingest-key}
+      IP_HASH_SECRET: ${IP_HASH_SECRET:-local-demo-ip-hash-key}
+      SOURCE_ID: demo-portal
+      SOURCE_NAME: Sentinel demo portal
+      COLLECTOR_START_AT: end
+    volumes:
+      - nginx-logs:/var/log/nginx:ro
+      - collector-state:/state
+    depends_on:
+      backend:
+        condition: service_healthy
+      monitored-nginx:
+        condition: service_started
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    volumes:
+      - ollama-data:/root/.ollama
+
+volumes:
+  postgres-data:
+  nginx-logs:
+  collector-state:
+  ollama-data:

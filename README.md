@@ -4,6 +4,92 @@
 
 A real-time cybersecurity monitoring platform that ingests structured logs, detects anomalies using rule-based and behavioral techniques, scores threats dynamically, and explains alerts in analyst-friendly language via an AI assistant.
 
+## Complete monitored-website demo
+
+The repository now includes a safe generic user portal, an Nginx reverse proxy,
+a durable JSON-log collector, and web-specific detectors. The Attack Lab sends
+real HTTP requests through Nginx; it never writes alerts directly.
+
+### Start everything
+
+```bash
+copy .env.example .env
+docker compose up --build
+```
+
+Open:
+
+- Demo portal: `http://localhost:8080`
+- Attack Lab: `http://localhost:8080/demo-controls`
+- ThreatLens dashboard: `http://localhost:5173`
+- API documentation: `http://localhost:8002/docs`
+
+Demo accounts:
+
+- Member: `alice` / `demo123`
+- Administrator: `admin` / `admin123`
+
+For a shareable demo machine, replace every value in `.env` first. All ports
+bind to loopback by default and are not intended for public exposure.
+
+AI explanations are optional. Enable the local model after the main stack is
+running with:
+
+```bash
+docker compose --profile ai up -d ollama
+docker compose exec ollama ollama pull mistral
+```
+
+Without it, detection and dashboards still work; recent alerts simply have no
+AI explanation and the assistant returns its availability fallback.
+
+### Configure detection limits
+
+Open `http://localhost:5173/settings` and unlock **Detection Limits** with the
+`ADMIN_API_KEY` value from the root `.env` file. The key is retained only for
+the current browser session. Administrators can change each detector's event
+window and severity thresholds without restarting the stack.
+
+Saved values are validated, persisted in PostgreSQL, and applied immediately.
+Saving or restoring defaults clears active in-memory detector windows so old
+events are never reinterpreted under new limits. The documented environment
+values remain the defaults until an override is saved.
+
+### Generate monitored attacks
+
+Use the buttons in the Attack Lab or run a bounded scenario manually:
+
+```bash
+python scripts/demo_attacks.py brute
+python scripts/demo_attacks.py flood
+python scripts/demo_attacks.py probe
+python scripts/demo_attacks.py errors
+python scripts/demo_attacks.py combined
+```
+
+The scenarios demonstrate login brute force, excessive request rate, distinct
+404 path probing, and repeated HTTP 500 responses. You can reproduce them by
+hand with the login form, browser refreshes, DevTools, curl, or an intercepting
+proxy pointed only at `localhost:8080`.
+
+### Operate and reset
+
+```bash
+docker compose ps
+docker compose logs -f collector backend monitored-nginx
+docker compose down
+docker compose down -v
+```
+
+`docker compose down -v` permanently removes demo database, log, checkpoint,
+and optional Ollama volumes. Normal `docker compose down` preserves them.
+
+The collector starts at the end of a new log by default, checkpoints only
+delivered records, retries temporary failures, survives Nginx log rotation,
+hashes anonymous visitor identities, and removes query strings before storage.
+Access-log monitoring cannot see request bodies, application outcomes hidden
+behind HTTP 200 responses, or network scans that never reach Nginx.
+
 ---
 
 ## Why ThreatLens?
@@ -285,6 +371,11 @@ All endpoints are prefixed with `/api/v1`. Full interactive docs at `/docs`.
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/v1/log` | Ingest a log event |
+| `POST` | `/api/v1/events/batch` | Authenticated, idempotent collector ingestion |
+| `POST` | `/api/v1/sources/{id}/heartbeat` | Collector health and counters |
+| `GET` | `/api/v1/sources` | Monitoring source status |
+| `GET` | `/api/v1/metrics/summary` | Authoritative dashboard totals |
+| `GET` | `/api/v1/metrics/activity` | Time-bucketed alert activity |
 | `GET` | `/api/v1/alerts` | List alerts (supports `?severity=`, `?resolved=`, `?limit=`) |
 | `PATCH` | `/api/v1/alerts/{id}/resolve` | Mark an alert resolved |
 | `PATCH` | `/api/v1/alerts/{id}/unresolve` | Unmark resolved |

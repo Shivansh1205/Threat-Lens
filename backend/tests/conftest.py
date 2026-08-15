@@ -20,7 +20,9 @@ import app.models  # noqa: F401
 
 from app.ai import chatbot as chatbot_module
 from app.database import Base, get_db
+from app.security import require_admin_key, require_ingest_key
 from app.detection.registry import reset_registry
+from app.detection.settings import restore_environment_thresholds
 from app.main import app as fastapi_app
 from app.realtime.websocket_manager import reset_ws_manager
 
@@ -48,9 +50,11 @@ def _fresh_detector_state() -> Generator[None, None, None]:
     Detectors carry in-memory state (sliding windows, known-IP sets). Without
     this, state leaks between tests and everything breaks in confusing ways.
     """
+    restore_environment_thresholds()
     reset_registry()
     yield
     reset_registry()
+    restore_environment_thresholds()
 
 
 @pytest.fixture(autouse=True)
@@ -136,11 +140,14 @@ def client(
     test_engine = db_session.get_bind()
     TestDecaySessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     monkeypatch.setattr("app.main._decay_db_session_factory", TestDecaySessionLocal)
+    monkeypatch.setattr("app.api.logs._explanation_db_session_factory", TestDecaySessionLocal)
 
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session
 
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[require_admin_key] = lambda: None
+    fastapi_app.dependency_overrides[require_ingest_key] = lambda: None
     try:
         with TestClient(fastapi_app) as c:
             yield c

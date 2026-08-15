@@ -20,8 +20,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
 from app.detection.base import AlertCandidate, Detector
+from app.detection.settings import DetectionThresholds, get_detection_thresholds
 from app.models.log_event import LogEvent
 from app.schemas.common import EventType, Severity
 
@@ -54,13 +54,14 @@ class PortScanDetector(Detector):
         # TODO(Phase 6+): move to Redis for horizontal scaling.
         self._windows: dict[str, deque[_PortSnap]] = {}
         self._last_emitted: dict[str, int] = {}
-        self._settings = get_settings()
         # One global lock for this detector instance — see BruteForceDetector's
         # module docstring for why a global lock (vs. per-key) is the right
         # call here.
         self._lock = threading.Lock()
 
-    def check(self, event: LogEvent, db: Session) -> list[AlertCandidate]:
+    def check(
+        self, event: LogEvent, db: Session, thresholds: DetectionThresholds | None = None
+    ) -> list[AlertCandidate]:
         if event.event_type != EventType.PORT_ACCESS:
             return []
         # A PORT_ACCESS event without a port is ambiguous — ignore it rather than
@@ -68,7 +69,7 @@ class PortScanDetector(Detector):
         if event.port is None:
             return []
 
-        s = self._settings
+        limits = (thresholds or get_detection_thresholds()).port_scan
         snap = _PortSnap(event)  # snapshot all needed values before any commit
 
         # Locked for the whole read-decide-write sequence: window mutation,
@@ -77,19 +78,19 @@ class PortScanDetector(Detector):
         with self._lock:
             window = self._windows.setdefault(event.ip, deque())
             window.append(snap)
-            self._evict(window, snap.ts, s.PORT_SCAN_WINDOW_SECONDS)
+            self._evict(window, snap.ts, limits.window_seconds)
 
             distinct = len({sn.port for sn in window})
             last = self._last_emitted.get(event.ip, 0)
 
             if (
-                distinct >= s.PORT_SCAN_CRITICAL_THRESHOLD
-                and last < s.PORT_SCAN_CRITICAL_THRESHOLD
+                distinct >= limits.critical_threshold
+                and last < limits.critical_threshold
             ):
-                self._last_emitted[event.ip] = s.PORT_SCAN_CRITICAL_THRESHOLD
+                self._last_emitted[event.ip] = limits.critical_threshold
                 return [self._candidate(snap, Severity.CRITICAL, 95, distinct)]
-            if distinct >= s.PORT_SCAN_HIGH_THRESHOLD and last < s.PORT_SCAN_HIGH_THRESHOLD:
-                self._last_emitted[event.ip] = s.PORT_SCAN_HIGH_THRESHOLD
+            if distinct >= limits.high_threshold and last < limits.high_threshold:
+                self._last_emitted[event.ip] = limits.high_threshold
                 return [self._candidate(snap, Severity.HIGH, 75, distinct)]
 
             return []
@@ -101,7 +102,9 @@ class PortScanDetector(Detector):
             window.popleft()
 
     @staticmethod
-    def _candidate(snap: _PortSnap, severity: Severity, score: int, distinct: int) -> AlertCandidate:
+    def _candidate(
+        snap: _PortSnap, severity: Severity, score: int, distinct: int
+    ) -> AlertCandidate:
         return AlertCandidate(
             alert_type="port_scan",
             severity=severity,

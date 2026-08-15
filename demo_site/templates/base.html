@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Sentinel Portal{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header><a class="brand" href="/">Sentinel Portal</a><nav>
+    <a href="/">Home</a><a href="/profile">Profile</a><a href="/admin">Admin</a>
+    {% if demo_mode %}<a href="/demo-controls">Attack Lab</a>{% endif %}
+    {% if user %}<form action="/logout" method="post"><button class="link">Log out {{ user }}</button></form>{% else %}<a href="/login">Log in</a>{% endif %}
+  </nav></header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer>Local security training portal monitored by ThreatLens</footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -15,7 +15,15 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.detection.base import AlertCandidate, Detector
-from app.detection.rules import BruteForceDetector, PortScanDetector, UnusualIpDetector
+from app.detection.rules import (
+    BruteForceDetector,
+    PathProbeDetector,
+    PortScanDetector,
+    RequestRateDetector,
+    ServerErrorSpikeDetector,
+    UnusualIpDetector,
+)
+from app.detection.settings import DetectionThresholds, get_detection_thresholds
 from app.models.alert import Alert
 from app.models.behavior_profile import BehaviorProfile
 from app.models.log_event import LogEvent
@@ -28,7 +36,13 @@ class DetectorRegistry:
     def __init__(self, detectors: list[Detector]) -> None:
         self.detectors = detectors
 
-    def run_all(self, event: LogEvent, db: Session, profile: BehaviorProfile) -> list[Alert]:
+    def run_all(
+        self,
+        event: LogEvent,
+        db: Session,
+        profile: BehaviorProfile,
+        thresholds: DetectionThresholds | None = None,
+    ) -> list[Alert]:
         """Run every detector, then risk-score and persist whatever fires.
 
         ``profile`` must reflect the user's behavioral state as of *this*
@@ -44,9 +58,10 @@ class DetectorRegistry:
         alerts, the rolling risk score is updated once per alert, not once
         per event.
         """
+        snapshot = thresholds or get_detection_thresholds()
         candidates: list[AlertCandidate] = []
         for detector in self.detectors:
-            candidates.extend(detector.check(event, db))
+            candidates.extend(detector.check(event, db, snapshot))
 
         if not candidates:
             return []
@@ -65,6 +80,7 @@ class DetectorRegistry:
                     raw_severity=result["raw_severity"],
                     raw_score=result["raw_score"],
                     message=c.message,
+                    evidence=c.evidence or None,
                     triggered_by_event_id=c.triggered_by_event_id,
                 )
             )
@@ -89,6 +105,9 @@ def get_registry() -> DetectorRegistry:
                 BruteForceDetector(),
                 PortScanDetector(),
                 UnusualIpDetector(),
+                RequestRateDetector(),
+                PathProbeDetector(),
+                ServerErrorSpikeDetector(),
             ]
         )
     return _registry

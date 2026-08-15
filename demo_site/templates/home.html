@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% block title %}Home · Sentinel Portal{% endblock %}
+{% block content %}
+<section class="hero"><span class="eyebrow">SECURE MEMBER SERVICES</span><h1>Your account, clearly protected.</h1><p>Browse this local portal normally, then open the Attack Lab to see ThreatLens identify suspicious request patterns in real time.</p><div class="actions"><a class="button" href="/login">Member login</a>{% if demo_mode %}<a class="button secondary" href="/demo-controls">Open Attack Lab</a>{% endif %}</div></section>
+<section class="grid"><article><h2>Account profile</h2><p>A session-protected page for authenticated users.</p></article><article><h2>Protected administration</h2><p>Role checks return genuine HTTP authorization outcomes.</p></article><article><h2>Observable API</h2><p><a href="/api/data">Request normal JSON data</a> through the monitored proxy.</p></article></section>
+{% endblock %}

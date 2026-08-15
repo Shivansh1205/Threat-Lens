@@ -45,6 +45,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
+from app.detection.settings import DetectionThresholds, get_detection_thresholds
 from app.models.behavior_profile import BehaviorProfile
 from app.models.log_event import LogEvent
 from app.schemas.common import EventType
@@ -68,10 +69,15 @@ def _to_naive_utc(ts: datetime) -> datetime:
 class BehaviorProfiler:
     """Reads and updates a user's persistent behavioral baseline."""
 
-    def __init__(self, db: Session, alpha: float | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        alpha: float | None = None,
+        thresholds: DetectionThresholds | None = None,
+    ) -> None:
         self.db = db
         self.alpha = alpha if alpha is not None else get_settings().EMA_ALPHA
-        self._settings = get_settings()
+        self._thresholds = thresholds or get_detection_thresholds()
 
     # ------------------------------------------------------------ lookup
 
@@ -117,7 +123,7 @@ class BehaviorProfiler:
         module's docstring for why.
         """
         profile = self.get_or_create(user_id)
-        return profile.login_count >= self._settings.UNUSUAL_IP_BOOTSTRAP_COUNT
+        return profile.login_count >= self._thresholds.unusual_ip.bootstrap_count
 
     # ------------------------------------------------------------- update
 
@@ -212,7 +218,7 @@ class BehaviorProfiler:
 
         # -- IP novelty --
         # `>=` for consistency with is_past_bootstrap() — see module docstring.
-        past_bootstrap = profile.login_count >= self._settings.UNUSUAL_IP_BOOTSTRAP_COUNT
+        past_bootstrap = profile.login_count >= self._thresholds.unusual_ip.bootstrap_count
         known = profile.known_ips or []
         ip_novelty = 1.0 if (past_bootstrap and event.ip not in known) else 0.0
         components.append(ip_novelty)

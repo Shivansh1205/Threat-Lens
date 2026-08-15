@@ -10,7 +10,7 @@ export default function ConnectionStatus({ status }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.disconnected;
 
   return (
-    <span className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 px-3 py-1.5 text-xs font-medium">
+    <span className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium dark:border-white/10 dark:bg-slate-900/60">
       <span className={`h-2 w-2 rounded-full ${config.dot}`} />
       <span className={config.text}>{config.label}</span>
     </span>

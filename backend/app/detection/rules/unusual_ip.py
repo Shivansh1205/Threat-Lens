@@ -20,6 +20,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.detection.base import AlertCandidate, Detector
+from app.detection.settings import DetectionThresholds, get_detection_thresholds
 from app.models.log_event import LogEvent
 from app.profiling.profiler import BehaviorProfiler
 from app.schemas.common import EventType, Severity
@@ -30,11 +31,14 @@ _LOGIN_TYPES = {EventType.LOGIN_SUCCESS, EventType.LOGIN_FAILURE}
 class UnusualIpDetector(Detector):
     """Per-user known-IP detector, backed entirely by the persistent profile."""
 
-    def check(self, event: LogEvent, db: Session) -> list[AlertCandidate]:
+    def check(
+        self, event: LogEvent, db: Session, thresholds: DetectionThresholds | None = None
+    ) -> list[AlertCandidate]:
         if event.event_type not in _LOGIN_TYPES:
             return []
 
-        profiler = BehaviorProfiler(db)
+        snapshot = thresholds or get_detection_thresholds()
+        profiler = BehaviorProfiler(db, thresholds=snapshot)
 
         if not profiler.is_past_bootstrap(event.user_id):
             return []

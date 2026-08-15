@@ -21,6 +21,7 @@ class AlertOut(BaseModel):
     raw_severity: Severity
     raw_score: int
     message: str
+    evidence: dict | None = None
     triggered_by_event_id: UUID | None = None
     explanation: str | None = None
     mitigation_steps: list | dict | None = None
