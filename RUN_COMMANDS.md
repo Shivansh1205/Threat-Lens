@@ -31,13 +31,11 @@ Open the project:
 
 - Dashboard: <http://localhost:5173>
 - Demo portal: <http://localhost:8080>
-- Attack Lab: <http://localhost:8080/demo-controls>
+- Security scenarios: open the **Security Scenarios** tab in the demo portal
 - API documentation: <http://localhost:8002/docs>
 
-Demo accounts:
-
-- Member: `alice` / `demo123`
-- Administrator: `admin` / `admin123`
+The portal accepts any account name. Passwords of at least six characters succeed
+in its demo authentication form.
 
 ## Check status and logs
 
@@ -51,11 +49,10 @@ Press `Ctrl+C` to stop following logs. This does not stop the services.
 ## Generate demo attacks
 
 ```powershell
-python scripts/demo_attacks.py brute
-python scripts/demo_attacks.py flood
-python scripts/demo_attacks.py probe
-python scripts/demo_attacks.py errors
-python scripts/demo_attacks.py combined
+python scripts/generate_logs.py --scenario brute_force --speed 10
+python scripts/generate_logs.py --scenario port_scan --speed 10
+python scripts/generate_logs.py --scenario unusual_ip --speed 10
+python scripts/generate_logs.py --scenario mixed --speed 10
 ```
 
 ## Optional local AI model

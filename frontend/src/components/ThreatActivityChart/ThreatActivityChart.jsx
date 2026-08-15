@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
+  Brush,
   CartesianGrid,
   Legend,
   ResponsiveContainer,
@@ -14,7 +15,7 @@ import { useTheme } from "../../context/ThemeContext";
 
 const BUCKET_MS = 30 * 60 * 1000;
 
-export default function ThreatActivityChart({ alerts = [], activity = [], height = 280 }) {
+export default function ThreatActivityChart({ alerts = [], activity = [], height = 280, showTimelineControl = false }) {
   const { theme } = useTheme();
   const [hiddenTypes, setHiddenTypes] = useState(() => new Set());
 
@@ -131,6 +132,16 @@ export default function ThreatActivityChart({ alerts = [], activity = [], height
             />
           );
         })}
+        {showTimelineControl && data.length > 1 && (
+          <Brush
+            dataKey="time"
+            height={24}
+            stroke={axis}
+            fill={theme === "dark" ? "#0f172a" : "#f8fafc"}
+            travellerWidth={10}
+            tickFormatter={(value) => value}
+          />
+        )}
       </AreaChart>
     </ResponsiveContainer>
   );

@@ -72,17 +72,22 @@ There is no configured Prettier or ESLint command.
 
 ## Collector and demo portal
 
-Run their focused tests from the repository root:
+Validate the demo portal and collector from the repository root:
 
 ```powershell
-python -m pytest collector/test_collector.py demo_site/test_app.py
+cd demo-site
+npm install
+npm run lint
+npm run build
+cd ..
+python -m pytest collector/test_collector.py
 ```
 
 Use Compose for end-to-end collector testing because it supplies the shared log
-and checkpoint volumes. Generate bounded traffic with:
+and checkpoint volumes. Generate bounded direct traffic with:
 
 ```powershell
-python scripts/demo_attacks.py combined
+python scripts/generate_logs.py --scenario mixed --speed 10
 ```
 
 ## Changing detectors

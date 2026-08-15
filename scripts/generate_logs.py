@@ -9,12 +9,12 @@ Usage
 
     python scripts/generate_logs.py --scenario brute_force
     python scripts/generate_logs.py --scenario port_scan --speed 50
-    python scripts/generate_logs.py --scenario mixed --target-url http://localhost:8000
+    python scripts/generate_logs.py --scenario mixed --target-url http://localhost:8002
 
 Flags
 -----
     --scenario   One of: normal, brute_force, port_scan, unusual_ip, mixed.
-    --target-url Backend base URL. Default http://localhost:8000.
+    --target-url Backend base URL. Default http://localhost:8002.
     --speed      Speed multiplier. 1 = real-time. 100 = 100x faster. Default 1.
 
 Each scenario prints ``Sent N events over Ds. Expected M alerts.`` at the end.
@@ -247,8 +247,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--target-url",
-        default="http://localhost:8000",
-        help="Backend base URL (default: http://localhost:8000).",
+        default="http://localhost:8002",
+        help="Backend base URL (default: http://localhost:8002).",
     )
     parser.add_argument(
         "--speed",

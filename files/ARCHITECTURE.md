@@ -10,8 +10,8 @@ setup and operations guide.
 client
   |
   v
-monitored-nginx ---> demo-site
-  |
+monitored-nginx ---> React demo-site -- direct scenario events -+
+  |                                                            |
   +-- JSON access log --> collector -- authenticated batches --+
                                                                |
 structured integrations -------- POST /api/v1/log -------------+
@@ -33,10 +33,11 @@ bound to loopback.
 
 ### Monitored portal and Nginx
 
-`demo_site/` is a generic Flask portal with deterministic, bounded Attack Lab
-actions. `nginx/nginx.conf` proxies the portal and emits structured JSON access
-logs. The Attack Lab produces real HTTP activity; it has no path to the alerts
-table or detection engine.
+`demo-site/` is a React ShopSphere portal with deterministic, bounded security
+scenarios. It posts structured storefront, authentication, background-traffic,
+and scenario events to `POST /api/v1/log`. `nginx/nginx.conf` proxies the portal
+and emits structured JSON access logs for real page and asset requests, which the
+collector ingests separately.
 
 ### Collector
 

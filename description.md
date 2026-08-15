@@ -12,7 +12,7 @@ The default demonstration runs seven Compose services:
 
 1. `monitored-nginx` exposes a generic portal on `127.0.0.1:8080` and writes one
    structured JSON access-log record per request.
-2. `demo-site` serves the safe portal and its bounded Attack Lab scenarios.
+2. `demo-site` serves the React ShopSphere portal and its bounded security scenarios.
 3. `collector` tails the Nginx log, transforms records into ThreatLens events,
    batches them, and sends them to the backend using an ingestion API key.
 4. `backend` provides the FastAPI ingestion, detection, analytics, reporting,
@@ -23,9 +23,9 @@ The default demonstration runs seven Compose services:
 7. `ollama` is an optional profile service that runs Mistral for explanations and
    chat responses.
 
-The portal and Attack Lab do not create alerts themselves. Requests pass through
-Nginx, are recorded, collected, and evaluated through the same monitoring path as
-ordinary portal traffic.
+Page and asset requests pass through Nginx and the collector. The portal's
+storefront, authentication, background-traffic, and security-scenario actions send
+structured events directly to the backend's single-event ingestion endpoint.
 
 ## Event lifecycle
 

@@ -28,7 +28,7 @@ the stack.
 
 - Docker Desktop with Docker Compose
 - Python 3.11+ only if you want to run the traffic scripts or backend tests
-- Node.js 18+ only for standalone frontend development
+- Node.js 20.19+ only for standalone frontend development
 
 Copy the environment template and start the stack:
 
@@ -45,15 +45,11 @@ Open:
 |---|---|
 | ThreatLens dashboard | <http://localhost:5173> |
 | Monitored demo portal | <http://localhost:8080> |
-| Attack Lab | <http://localhost:8080/demo-controls> |
 | API documentation | <http://localhost:8002/docs> |
 
-Demo portal accounts:
-
-| Role | Username | Password |
-|---|---|---|
-| Member | `alice` | `demo123` |
-| Administrator | `admin` | `admin123` |
+Open the portal's **Security Scenarios** tab to generate bounded attack and normal
+traffic. The account name can be changed inside the portal; passwords of at least
+six characters succeed in its demo authentication form.
 
 All published ports bind to `127.0.0.1`. The default credentials and secrets are
 for a local demonstration only. Replace every value in `.env` before using the
@@ -68,21 +64,13 @@ docker compose logs -f collector backend monitored-nginx
 
 See [RUN_COMMANDS.md](RUN_COMMANDS.md) for the short operations reference.
 
-## Generate monitored traffic
+## Generate demo traffic
 
-The Attack Lab buttons and `scripts/demo_attacks.py` send bounded HTTP scenarios
-through Nginx. They do not insert events or alerts directly.
+The ShopSphere portal sends its storefront, authentication, background-traffic,
+and security-scenario events directly to `POST /api/v1/log`. Page and asset
+requests still pass through monitored Nginx and are collected from its access log.
 
-```powershell
-python scripts/demo_attacks.py brute
-python scripts/demo_attacks.py flood
-python scripts/demo_attacks.py probe
-python scripts/demo_attacks.py errors
-python scripts/demo_attacks.py combined
-```
-
-The older structured-event generator is still useful for exercising login,
-port-scan, and unusual-IP detectors directly through the backend API:
+For command-line scenarios, use the structured-event generator:
 
 ```powershell
 python scripts/generate_logs.py --scenario mixed --speed 10 --target-url http://localhost:8002
@@ -119,13 +107,15 @@ reloads the environment defaults from `backend/.env.example`.
 ## Architecture
 
 ```text
-Browser -> monitored Nginx -> demo portal
-              |
-              v
-        JSON access log -> collector -> authenticated batch API
-                                           |
-Direct structured events ------------------+
-                                           v
+Browser -> monitored Nginx -> React demo portal
+              |                    |
+              v                    | direct structured events
+        JSON access log            |
+              |                    |
+              v                    v
+          collector -> authenticated batch API
+                                  |
+                                  v
                               validate and persist event
                                            |
                               profile -> detect -> score
@@ -215,10 +205,15 @@ npm run lint
 npm run build
 ```
 
-Collector and demo-site tests:
+Demo-site validation and collector tests:
 
 ```powershell
-python -m pytest collector/test_collector.py demo_site/test_app.py
+cd demo-site
+npm install
+npm run lint
+npm run build
+cd ..
+python -m pytest collector/test_collector.py
 ```
 
 For local development workflows and contribution conventions, see
@@ -229,10 +224,10 @@ For local development workflows and contribution conventions, see
 ```text
 backend/       FastAPI API, detectors, profiling, scoring, AI, and migrations
 collector/     Durable Nginx JSON-log tailer and authenticated batch client
-demo_site/     Safe Flask portal and browser-based Attack Lab
+demo-site/     React ShopSphere portal and direct security-scenario generator
 frontend/      React 18 and Vite dashboard
 nginx/         Reverse-proxy and structured access-log configuration
-scripts/       Monitored HTTP and direct structured-event generators
+scripts/       Direct structured-event generators and seed utilities
 files/         Architecture, roadmap, changelog, and contribution docs
 compose.yaml   Complete local demonstration topology
 ```

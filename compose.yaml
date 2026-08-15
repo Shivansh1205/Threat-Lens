@@ -18,11 +18,12 @@ services:
     environment:
       ENV: demo
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpass}@postgres:5432/threatlens
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8080,http://127.0.0.1:8080
       INGEST_API_KEY: ${INGEST_API_KEY:-local-demo-ingest-key}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-local-demo-admin-key}
       IP_HASH_SECRET: ${IP_HASH_SECRET:-local-demo-ip-hash-key}
       OLLAMA_HOST: http://ollama:11434
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-120}
       LOGIN_PATHS: /login
     ports:
       - "127.0.0.1:8002:8002"
@@ -48,12 +49,12 @@ services:
         condition: service_healthy
 
   demo-site:
-    build: ./demo_site
-    environment:
-      DEMO_MODE: "true"
-      PORTAL_SESSION_SECRET: ${PORTAL_SESSION_SECRET:-local-demo-session-secret}
+    build:
+      context: ./demo-site
+      args:
+        VITE_THREATLENS_URL: http://localhost:8002
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
       interval: 5s
       timeout: 3s
       retries: 20
