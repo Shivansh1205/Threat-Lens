@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Send, User as UserIcon } from "lucide-react";
 import PageLayout from "../components/PageLayout/PageLayout";
 import { useChatContext } from "../context/ChatContext";
+import MarkdownText from "../components/MarkdownText/MarkdownText";
+import AdminKeyPrompt from "../components/AdminKeyPrompt/AdminKeyPrompt";
 
 // Same bubble styling/logic as ChatWidget's ChatBubble — duplicated rather
 // than imported since ChatWidget doesn't export it separately, and this
@@ -24,7 +26,7 @@ function ChatBubble({ message }) {
                 : "bg-slate-800 text-slate-200"
           }`}
         >
-          {message.text}
+          <MarkdownText>{message.text}</MarkdownText>
         </p>
       </div>
     </div>
@@ -41,7 +43,7 @@ function ChatBubble({ message }) {
  * App.jsx, not one per component.
  */
 export default function Assistant() {
-  const { messages, sendMessage, isLoading } = useChatContext();
+  const { messages, sendMessage, isLoading, adminKey, setAdminKey, authError } = useChatContext();
   const [draft, setDraft] = useState("");
   const bottomRef = useRef(null);
 
@@ -60,6 +62,7 @@ export default function Assistant() {
     <PageLayout title="Assistant" subtitle="Ask about recent alerts, users, or overall threat activity">
       <div className="flex h-[calc(100vh-140px)] flex-col rounded-xl border border-white/5 bg-slate-900/60">
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+          {!adminKey && <AdminKeyPrompt onUnlock={setAdminKey} error={authError} />}
           {messages.length === 0 && (
             <p className="text-sm text-slate-500">
               Ask about recent alerts — e.g. &ldquo;what&apos;s happened with alice recently?&rdquo; Conversation

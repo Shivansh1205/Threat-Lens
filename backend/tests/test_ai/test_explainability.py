@@ -168,10 +168,12 @@ def test_build_prompt_includes_key_fields(db_session: Session) -> None:
     assert "brute_force" in prompt
     assert "45" in prompt  # raw_score
     assert "62" in prompt  # adjusted score
-    assert "0.80" in prompt  # deviation_score
-    assert "41.5" in prompt  # user_risk_score
+    assert "highly unusual" in prompt  # deviation band
+    assert "cumulative risk band" in prompt
     assert "7" in prompt  # login_count
-    assert "10.0.0.99" in prompt  # event ip
+    assert "10.0.0.99" not in prompt  # raw IP must never leave the backend
+    assert "mallory" not in prompt
+    assert "5 failed logins" not in prompt
     assert "LOGIN_FAILURE" in prompt
     assert "block IP" in prompt  # vocabulary present in prompt
 
@@ -191,4 +193,4 @@ def test_build_prompt_notes_when_score_unchanged(db_session: Session) -> None:
 
     prompt = engine.build_prompt(alert, event, profile)
 
-    assert "matches the detector's original call exactly" in prompt
+    assert "near baseline" in prompt

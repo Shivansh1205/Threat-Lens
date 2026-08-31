@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -22,7 +23,7 @@ SOURCE_ID = os.getenv("SOURCE_ID", "demo-portal")
 SOURCE_NAME = os.getenv("SOURCE_NAME", "Sentinel demo portal")
 LOGIN_PATHS = {
     item.strip()
-    for item in os.getenv("LOGIN_PATHS", "/login").split(",")
+    for item in os.getenv("LOGIN_PATHS", "/login,/demo/auth-attempt").split(",")
     if item.strip()
 }
 BATCH_SIZE = int(os.getenv("COLLECTOR_BATCH_SIZE", "50"))
@@ -84,7 +85,12 @@ def parse_event(line: str) -> dict:
     if username in {"-", "null"}:
         username = ""
     event_type = "API_CALL"
-    if endpoint in LOGIN_PATHS and str(item.get("method", "")).upper() == "POST":
+    port = None
+    port_match = re.fullmatch(r"/demo/port/(\d{1,5})", endpoint)
+    if port_match and 1 <= int(port_match.group(1)) <= 65535:
+        event_type = "PORT_ACCESS"
+        port = int(port_match.group(1))
+    elif endpoint in LOGIN_PATHS and str(item.get("method", "")).upper() == "POST":
         event_type = (
             "LOGIN_FAILURE" if status_code in {400, 401, 403} else "LOGIN_SUCCESS"
         )
@@ -101,6 +107,7 @@ def parse_event(line: str) -> dict:
         "event_type": event_type,
         "status": str(status_code),
         "endpoint": endpoint,
+        "port": port,
         "user_agent": str(item.get("user_agent") or "")[:1024] or None,
         "http_method": str(item.get("method") or "GET").upper()[:16],
         "http_status": status_code,

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Bot, MessageCircle, Send, User as UserIcon, X } from "lucide-react";
 import { useChatContext } from "../../context/ChatContext";
+import MarkdownText from "../MarkdownText/MarkdownText";
+import AdminKeyPrompt from "../AdminKeyPrompt/AdminKeyPrompt";
 
 function ChatBubble({ message }) {
   const isUser = message.role === "user";
@@ -25,7 +27,7 @@ function ChatBubble({ message }) {
                 : "bg-slate-800 text-slate-200"
           }`}
         >
-          {message.text}
+          <MarkdownText>{message.text}</MarkdownText>
         </p>
       </div>
     </div>
@@ -40,7 +42,7 @@ function ChatBubble({ message }) {
  * full-page Assistant view too.
  */
 export default function ChatWidget() {
-  const { messages, sendMessage, isLoading } = useChatContext();
+  const { messages, sendMessage, isLoading, adminKey, setAdminKey, authError } = useChatContext();
   const [expanded, setExpanded] = useState(true);
   const [draft, setDraft] = useState("");
 
@@ -68,6 +70,7 @@ export default function ChatWidget() {
       {expanded && (
         <>
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+            {!adminKey && <AdminKeyPrompt onUnlock={setAdminKey} error={authError} />}
             {messages.length === 0 && (
               <p className="text-sm text-slate-500">
                 Ask about recent alerts — e.g. &ldquo;what&apos;s happened with alice recently?&rdquo;

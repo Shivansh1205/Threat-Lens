@@ -1,232 +1,133 @@
 # Contributing
 
-How to set up ThreatLens locally, run it, and add to it without stepping on anyone's toes. Even if you're the only person on the codebase this week, writing this down saves the future-you an hour.
-
----
+Start with the root [README](../README.md) for the product overview and complete
+Compose demonstration. This guide covers source development and validation.
 
 ## Prerequisites
 
-- **Python 3.11+** (3.12 preferred).
-- **Node.js 18+** and **npm** (or pnpm / yarn if you prefer).
-- **PostgreSQL 14+** running locally or in Docker.
-- **Ollama** — needed for the LLM explainability layer. Install from [ollama.com](https://ollama.com).
-- **Git**.
-- **VS Code** (recommended) with Python and ES7+ React extensions.
+- Python 3.11+
+- Node.js 18+ and npm
+- Docker Desktop and Docker Compose
+- Git
+- Ollama only when developing optional AI features
 
-Check versions:
+Never commit `.env` files or real API keys. Root, backend, and frontend templates
+are provided as `.env.example` files.
 
-```bash
-python --version
-node --version
-psql --version
-ollama --version
+## Integrated setup
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build -d
 ```
 
----
+Use the integrated stack for cross-service verification. Rebuild images after
+source changes with `docker compose up --build -d`.
 
-## First-time setup
+## Backend
 
-### 1. Clone the repo
-
-```bash
-git clone <repo-url> threatlens
-cd threatlens
-```
-
-### 2. Backend
-
-```bash
+```powershell
 cd backend
 python -m venv .venv
-source .venv/bin/activate       # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pytest
+python -m ruff check .
+python -m black --check .
 ```
 
-Copy the env template and fill it in:
+On macOS or Linux, activate with `source .venv/bin/activate`. Tests use SQLite, so
+PostgreSQL and Ollama are not required.
 
-```bash
-cp .env.example .env
+To run the backend directly, copy `backend/.env.example` to `backend/.env`, provide
+the PostgreSQL database in `DATABASE_URL`, apply migrations, and start Uvicorn:
+
+```powershell
+Copy-Item .env.example .env
+python -m alembic upgrade head
+python -m uvicorn app.main:app --reload --port 8002
 ```
 
-Required env vars (see `.env.example` for the full list):
+Stop the Compose backend first because it also publishes port 8002.
 
-```
-DATABASE_URL=postgresql://user:pass@localhost:5432/threatlens
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=mistral
-JWT_SECRET=change-me
-LOG_LEVEL=INFO
-```
+## Frontend
 
-Initialize the database:
-
-```bash
-# create the DB
-createdb threatlens
-
-# run migrations (alembic or whatever we settle on)
-alembic upgrade head
-```
-
-Optional: seed with sample data for the dashboard to have something to render:
-
-```bash
-python scripts/seed_data.py
-```
-
-### 3. Frontend
-
-```bash
-cd ../frontend
+```powershell
+cd frontend
 npm install
+Copy-Item .env.example .env
+npm run dev
 ```
 
-### 4. Ollama
+Restart Vite after changing environment variables. Validate with:
 
-```bash
-ollama pull mistral
-ollama serve                    # runs in background on :11434
-```
-
-Confirm it's alive:
-
-```bash
-curl http://localhost:11434/api/tags
-```
-
----
-
-## Running locally
-
-Three processes, three terminals:
-
-```bash
-# Terminal 1 — backend
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-
-# Terminal 2 — frontend
-cd frontend
-npm run dev                     # opens http://localhost:5173
-
-# Terminal 3 — Ollama (if not already running)
-ollama serve
-```
-
-Then:
-
-- Dashboard: <http://localhost:5173>
-- API docs (Swagger): <http://localhost:8000/docs>
-- WebSocket endpoint: `ws://localhost:8000/ws/alerts`
-
-### Simulating log traffic
-
-Handy for testing detection without a real log source:
-
-```bash
-python scripts/generate_logs.py --scenario brute_force --duration 60
-python scripts/generate_logs.py --scenario port_scan
-python scripts/generate_logs.py --scenario normal --duration 300
-```
-
----
-
-## Running tests
-
-```bash
-# backend
-cd backend
-pytest                          # all tests
-pytest -k detection             # only detection tests
-pytest --cov=app                # with coverage
-
-# frontend
-cd frontend
+```powershell
 npm test
+npm run lint
+npm run build
 ```
 
-Before you push: run `pytest` and `npm test`. CI will re-run them, but catching failures locally is faster.
+Oxlint is the configured linter and Node's test runner executes utility tests.
+There is no configured Prettier or ESLint command.
 
----
+## Collector and demo portal
 
-## Code style
+Validate the demo portal and collector from the repository root:
 
-- **Python**: black + ruff. Run `black . && ruff check .` before committing.
-- **JavaScript / React**: Prettier + ESLint. `npm run lint` and `npm run format`.
-- **Imports**: absolute imports in the backend (`from app.detection import ...`), no deep relatives.
-- **Types**: type hints on all public functions in Python; TypeScript is preferred in frontend but plain JSX is fine where already used.
-- **Docstrings**: every module and public function gets a one-line summary; longer for anything non-obvious.
-
----
-
-## Branch and commit conventions
-
-- **Main branch**: `main`. Never push directly.
-- **Feature branches**: `feat/<short-description>`, e.g. `feat/port-scan-detector`.
-- **Fix branches**: `fix/<short-description>`.
-- **Docs branches**: `docs/<short-description>`.
-
-Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-feat(detection): add port scan detector with 3s window
-fix(dashboard): correct severity color for MEDIUM
-docs(architecture): clarify data flow for LLM layer
-chore(deps): bump fastapi to 0.115
+```powershell
+cd demo-site
+npm install
+npm run lint
+npm run build
+cd ..
+python -m pytest collector/test_collector.py
 ```
 
----
+Use Compose for end-to-end collector testing because it supplies the shared log
+and checkpoint volumes. Generate bounded direct traffic with:
 
-## Pull request checklist
+```powershell
+python scripts/generate_logs.py --scenario mixed --speed 10
+```
 
-Before opening a PR:
+## Changing detectors
 
-- [ ] Tests pass locally (`pytest` and `npm test`).
-- [ ] Linters happy (`ruff check`, `npm run lint`).
-- [ ] `CHANGELOG.md` updated under `## [Unreleased]`.
-- [ ] If the change affects architecture or module boundaries, `ARCHITECTURE.md` updated.
-- [ ] If a new phase milestone is complete, `PHASES.md` updated.
-- [ ] Screenshot attached for any UI change.
+Detectors live in `backend/app/detection/rules/`, return `AlertCandidate` values,
+and must not commit database rows themselves.
 
-At least one team member reviews. Squash merge into `main`.
+When changing a rule:
 
----
+1. Register it in `detection/registry.py`.
+2. Put configuration in `config.py`, `detection/settings.py`, and the env template.
+3. Update Settings UI metadata for administrator-editable values.
+4. Add threshold, escalation, reset, and concurrency tests as applicable.
+5. Update user-facing docs and the changelog.
 
-## Working with the LLM layer
+Do not update a behavior profile before rules inspect the current event; unusual-IP
+detection depends on the pre-event baseline.
 
-Some notes that would otherwise cost you a Saturday afternoon:
+## Changing AI or frontend code
 
-- **Cold-start latency**: Ollama takes a few seconds to load the model on first request. Warm it up with a dummy call at server startup if that matters for demos.
-- **Prompt changes**: any change to prompt templates in `ExplainabilityEngine.build_prompt` invalidates cached explanations. Bump a `PROMPT_VERSION` constant and clear the cache.
-- **Hallucinations**: the model sometimes invents mitigation steps. We defend against this by giving it a fixed vocabulary of mitigation types in the prompt and post-validating that its response only references those.
-- **Timeout**: LLM calls have a 10s timeout. If exceeded, the alert is emitted without an explanation and marked for retry.
+Mock `backend/app/ai/ollama_client.py` in AI tests. Ingestion must stay independent
+of model latency, and explanation failures must leave stored alerts intact.
 
----
+Frontend pages live in `frontend/src/pages/` and reusable features in
+`frontend/src/components/`. Reuse the alert stream and chat/theme contexts, test
+non-trivial utilities, and verify visual changes in both themes.
 
-## Working with the detection engine
+## Commits and reviews
 
-- Detectors live in `backend/app/detection/rules/`. Each is a class implementing `check(event, context) -> Optional[Alert]`.
-- To add a new detector: create the class, register it in `backend/app/detection/registry.py`, add a test.
-- Sliding windows and time-based checks use the shared `Deque`-backed `SlidingWindow` utility. Don't roll your own.
-- Threshold constants live in `backend/app/config.py`. Don't hardcode.
+Use focused branches and Conventional Commit messages, for example:
 
----
+```text
+feat(detection): add path-probe escalation
+fix(reports): escape spreadsheet formula cells
+docs(architecture): document collector idempotency
+```
 
-## Working with the frontend
+Before review, run relevant tests, linters, and the frontend production build; add
+a changelog entry for user-visible behavior; update architecture/setup docs for
+interface changes; and include screenshots for UI changes.
 
-- Component structure: `frontend/src/components/<Feature>/<Component>.jsx`.
-- Global state (alerts, connected status, user session) uses React Context. Feature-local state stays in the component.
-- Real-time updates come through a single WebSocket managed by `frontend/src/hooks/useAlertStream.js`. Consume it, don't open your own connection.
-- Charts use Recharts (or whatever we standardize on — check `package.json`).
-
----
-
-## Getting unstuck
-
-- **Ollama returns empty responses**: check the model is pulled (`ollama list`) and the daemon is running.
-- **WebSocket disconnects immediately**: the frontend's dev proxy might not be forwarding `ws://`. Check `vite.config.js`.
-- **"Address already in use"**: a previous uvicorn didn't shut down. `lsof -i :8000` and kill it.
-- **DB migration errors**: `alembic downgrade base && alembic upgrade head` for a clean slate (destroys data).
-
-If none of the above works, ask in the team chat and add the fix here once you find it.
+For the disposable Compose demo, `docker compose down -v` is the explicit full
+reset and permanently deletes all project volumes.

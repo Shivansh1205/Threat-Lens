@@ -2,17 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{% block title %}Sentinel Portal{% endblock %}</title>
+  <title>{% block title %}Sentinel Security Cloud{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header><a class="brand" href="/">Sentinel Portal</a><nav>
-    <a href="/">Home</a><a href="/profile">Profile</a><a href="/admin">Admin</a>
-    {% if demo_mode %}<a href="/demo-controls">Attack Lab</a>{% endif %}
-    {% if user %}<form action="/logout" method="post"><button class="link">Log out {{ user }}</button></form>{% else %}<a href="/login">Log in</a>{% endif %}
-  </nav></header>
-  <main>{% block content %}{% endblock %}</main>
-  <footer>Local security training portal monitored by ThreatLens</footer>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="brand-mark">S</span><span>Sentinel<span class="brand-muted">Cloud</span></span></a>
+      <nav class="nav-links">
+        <a href="/">Overview</a>
+        {% if user %}<a href="/profile">Account</a>{% endif %}
+        {% if user and user == "admin" %}<a href="/admin">Admin</a>{% endif %}
+        {% if demo_mode %}<a class="nav-accent" href="/demo-controls">Attack Lab</a>{% endif %}
+      </nav>
+      <div class="account-chip">
+        {% if user %}<span class="status-dot"></span><span>{{ user }}</span>{% if demo_mode %}<form action="/switch-user" method="post" class="switch-form"><label class="sr-only" for="demo-user">Switch demo user</label><select id="demo-user" name="username">{% for demo_user in demo_users %}<option value="{{ demo_user }}"{% if demo_user == user %} selected{% endif %}>{{ demo_user }}</option>{% endfor %}</select><input type="hidden" name="next" value="{{ request.url.path }}"><button class="text-button" type="submit">Switch</button></form>{% endif %}<form action="/logout" method="post"><button class="text-button">Log out</button></form>
+        {% else %}<a class="button small" href="/login">Sign in</a>{% endif %}
+      </div>
+    </header>
+    <main>{% block content %}{% endblock %}</main>
+    <footer><span>SentinelCloud training environment</span><span>Monitored by ThreatLens</span></footer>
+  </div>
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,19 +1,12 @@
-"""ExplainabilityEngine — turns an Alert into an analyst-readable explanation
-and a constrained mitigation checklist, via a local LLM (Ollama/Mistral).
+"""Legacy single-alert explanation utilities.
 
-RUNS OUT-OF-BAND, NEVER INLINE WITH INGESTION. ``POST /api/v1/log`` persists
-alerts with ``explanation``/``mitigation_steps`` left NULL and schedules
-``generate_explanation_task`` as a FastAPI ``BackgroundTasks`` job (see
-api/logs.py) — this module is what that background task calls. An LLM call
-can take several seconds; doing it inline would make ingestion latency
-depend on Ollama, which is exactly the kind of coupling that caused the
-connection-pool exhaustion problems in earlier phases under bursty load. A
-production system would use a real task queue (Celery, arq, etc.) for
-retry/observability/backpressure; BackgroundTasks is a reasonable v1 for a
-student project and adds no new dependency.
+Ingestion stores detector output without invoking this module. Current LLM
+analysis is performed only through the authenticated administrator assistant,
+which retrieves relevant records when the administrator asks a question. The
+parser and mitigation vocabulary remain reusable for explicit future jobs.
 
 PARSING STRATEGY — delimited text, not JSON, and here's why: local 7B-class
-models like Mistral running zero-shot through Ollama are noticeably
+small models running zero-shot through a local service are noticeably
 unreliable at emitting STRICT JSON on every call — a stray preamble
 ("Sure, here's the analysis:"), a trailing code fence, a smart-quote instead
 of a straight one, or a truncated closing brace are all common, and every
@@ -39,6 +32,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.ai import ollama_client
+from app.ai.safe_context import alert_prompt_context
 from app.config import get_settings
 from app.models.alert import Alert
 from app.models.behavior_profile import BehaviorProfile
@@ -76,7 +70,7 @@ def _build_mitigation_prompt_block() -> str:
 
 
 class ExplainabilityEngine:
-    """Builds prompts, calls Ollama, parses responses, updates Alert rows."""
+    """Builds safe prompts, calls the external provider, and updates Alert rows."""
 
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -87,6 +81,26 @@ class ExplainabilityEngine:
     def build_prompt(
         self, alert: Alert, event: LogEvent | None, profile: BehaviorProfile | None
     ) -> str:
+        safe_facts = alert_prompt_context(
+            alert, event, profile, max_chars=self.settings.LLM_MAX_CONTEXT_CHARS
+        )
+        return f"""You are a security analyst assistant reviewing an intrusion-detection alert.
+
+{safe_facts}
+
+TASK
+Write a concise, analyst-readable explanation in 2-4 sentences. Use only the
+facts above; do not invent identities, locations, IPs, URLs, or raw event data.
+Then select 2-5 mitigation actions from this fixed list ONLY:
+{_build_mitigation_prompt_block()}
+
+Respond in EXACTLY this format, with no other text before or after:
+
+EXPLANATION: <your 2-4 sentence explanation>
+MITIGATION:
+- <action from the list above>: <one-line justification>
+"""
+
         """Construct the LLM prompt for one alert (D3).
 
         Includes: alert type/severity/score (raw AND adjusted, with a note
@@ -254,20 +268,23 @@ MITIGATION:
 
         prompt = self.build_prompt(alert, event, profile)
 
-        raw_response = await ollama_client.generate(prompt, timeout=self.settings.LLM_TIMEOUT_SECONDS)
+        raw_response = await ollama_client.generate(
+            prompt, timeout=self.settings.LLM_TIMEOUT_SECONDS
+        )
         if raw_response is None:
-            # ollama_client already logged the specific failure reason.
+            # The provider client already logged the specific failure reason.
             # Nothing to do — explanation/mitigation_steps are already NULL
             # from alert creation.
-            logger.info("No explanation generated for alert %s (Ollama unavailable)", alert_id)
+            logger.info(
+                "No explanation generated for alert %s (external LLM unavailable)", alert_id
+            )
             return
 
         parsed = self._parse_response(raw_response)
         if parsed is None:
             logger.warning(
-                "Could not parse Ollama response for alert %s, leaving fields NULL. Raw response: %s",
+                "Could not parse external LLM response for alert %s, leaving fields NULL",
                 alert_id,
-                raw_response[:1000],
             )
             return
 
@@ -281,7 +298,9 @@ MITIGATION:
 # ---------------------------------------------------------- background task
 
 
-async def generate_explanation_task(alert_id: UUID, db_session_factory: "Callable[[], Session]") -> None:
+async def generate_explanation_task(
+    alert_id: UUID, db_session_factory: Callable[[], Session]
+) -> None:
     """Entry point for ``BackgroundTasks.add_task`` (see api/logs.py).
 
     Creates and closes its own DB session — background tasks run after the
@@ -290,7 +309,7 @@ async def generate_explanation_task(alert_id: UUID, db_session_factory: "Callabl
     must not take down the worker or surface to a client that has already
     gotten its response.
 
-    TODO(future phase): no retry-with-backoff here. A transient Ollama
+    TODO(future phase): no retry-with-backoff here. A transient provider
     hiccup just means this alert stays unexplained; a real task queue
     (Celery/arq) would let us retry a bounded number of times instead.
     """

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Admin · SentinelCloud{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <span class="eyebrow">ADMIN CONTROL PLANE</span>
+  <h1>Workspace administration</h1>
+  <p>Manage local demo identities and run controlled security exercises.</p>
+</section>
+<section class="metric-grid">
+  <article class="metric-card"><span>Detection policy</span><strong>Active</strong><em class="up">Protected</em></article>
+  <article class="metric-card"><span>API keys</span><strong>03</strong><em class="neutral">Rotated recently</em></article>
+  <article class="metric-card"><span>Open incidents</span><strong>02</strong><em class="down">Review needed</em></article>
+  <article class="metric-card"><span>Demo users</span><strong>{{ users|length }}</strong><em class="neutral">Available locally</em></article>
+</section>
+<section class="content-grid">
+  <article class="panel">
+    <span class="eyebrow">IDENTITY MANAGEMENT</span>
+    <h2>Add demo user</h2>
+    {% if user_error %}<div class="error">{{ user_error }}</div>{% endif %}
+    {% if user_notice %}<div class="notice">{{ user_notice }}</div>{% endif %}
+    <form action="/admin/users" method="post" class="stack">
+      <label>Username<input name="username" pattern="[a-z0-9][a-z0-9_-]{2,31}" minlength="3" maxlength="32" placeholder="e.g. bob" required></label>
+      <label>Temporary password<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
+      <button class="button" type="submit">Add user</button>
+    </form>
+    <p class="demo-hint">New users are local training identities with the standard user role.</p>
+  </article>
+  <article class="panel">
+    <span class="eyebrow">CURRENT IDENTITIES</span>
+    <h2>Demo users</h2>
+    {% for demo_user in users %}<div class="check-row"><span class="check">✓</span><span>{{ demo_user }}</span><strong>{% if demo_user == "admin" %}ADMIN{% else %}USER{% endif %}</strong></div>{% endfor %}
+  </article>
+</section>
+<section class="content-grid">
+  <article class="panel"><span class="eyebrow">POLICY STATUS</span><h2>Security controls</h2><div class="check-row"><span class="check">✓</span><span>Login anomaly detection</span><strong>ON</strong></div><div class="check-row"><span class="check">✓</span><span>API rate monitoring</span><strong>ON</strong></div><div class="check-row"><span class="check">✓</span><span>Route probe detection</span><strong>ON</strong></div><div class="check-row"><span class="check">✓</span><span>ThreatLens collector</span><strong>LIVE</strong></div></article>
+  <article class="panel"><span class="eyebrow">NEXT ACTION</span><h2>Run a controlled test</h2><p class="hero-panel p">Use the Attack Lab to generate bounded traffic for any signed-in demo user.</p>{% if demo_mode %}<a class="button full" href="/demo-controls">Open Attack Lab →</a>{% endif %}</article>
+</section>
+{% endblock %}

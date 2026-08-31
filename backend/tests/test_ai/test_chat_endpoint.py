@@ -8,19 +8,25 @@ from fastapi.testclient import TestClient
 
 
 def test_chat_endpoint_returns_mocked_response(client: TestClient) -> None:
-    with patch("app.ai.ollama_client.generate", new=AsyncMock(return_value="Nothing alarming today.")):
+    with patch(
+        "app.ai.ollama_client.generate_grounded",
+        new=AsyncMock(return_value="Settings are available."),
+    ):
         resp = client.post(
-            "/api/v1/chat", json={"session_id": "s1", "message": "Anything I should worry about?"}
+            "/api/v1/chat", json={"session_id": "s1", "message": "Show detector settings"}
         )
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body == {"response": "Nothing alarming today."}
+    assert body["response"].startswith("Settings are available.")
+    assert "Scope:" in body["response"]
 
 
 def test_chat_endpoint_ollama_down_returns_fallback(client: TestClient) -> None:
-    with patch("app.ai.ollama_client.generate", new=AsyncMock(return_value=None)):
-        resp = client.post("/api/v1/chat", json={"session_id": "s2", "message": "Status update?"})
+    with patch("app.ai.ollama_client.generate_grounded", new=AsyncMock(return_value=None)):
+        resp = client.post(
+            "/api/v1/chat", json={"session_id": "s2", "message": "Show detector settings"}
+        )
 
     assert resp.status_code == 200
     assert "unable to reach the AI assistant" in resp.json()["response"]

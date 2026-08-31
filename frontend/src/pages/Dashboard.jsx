@@ -59,7 +59,7 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Panel title="Threat Activity">
-              <ThreatActivityChart alerts={alerts} activity={overview.activity} />
+              <ThreatActivityChart alerts={alerts} activity={overview.activity} showTimelineControl />
             </Panel>
             <Panel title="Severity Breakdown">
               <SeverityBreakdown alerts={alerts} />

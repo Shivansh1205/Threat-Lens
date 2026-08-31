@@ -18,9 +18,9 @@ JSONVariant = JSONB().with_variant(JSON(), "sqlite")
 class Alert(Base):
     """A raised alert.
 
-    ``explanation`` and ``mitigation_steps`` are populated later by the AI layer
-    (Phase 6); they are nullable here so detection can emit an alert without
-    waiting on the LLM.
+    ``explanation`` and ``mitigation_steps`` are retained as nullable legacy
+    fields. Ingestion does not invoke an LLM; analysis is requested on demand
+    through authenticated administrator chat.
 
     ``score``/``severity`` are the FINAL, risk-adjusted values — what the
     analyst sees and what the dashboard sorts/filters by. ``raw_score``/
