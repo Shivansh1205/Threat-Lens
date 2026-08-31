@@ -66,8 +66,8 @@ See [RUN_COMMANDS.md](RUN_COMMANDS.md) for the short operations reference.
 
 ## Generate demo traffic
 
-The ShopSphere portal sends its storefront, authentication, background-traffic,
-and security-scenario events directly to `POST /api/v1/log`. Page and asset
+The Sentinel portal sends its authentication, background-traffic, and
+security-scenario events directly to `POST /api/v1/log`. Page and asset
 requests still pass through monitored Nginx and are collected from its access log.
 
 For command-line scenarios, use the structured-event generator:
@@ -205,13 +205,11 @@ npm run lint
 npm run build
 ```
 
-Demo-site validation and collector tests:
+Sentinel portal validation and collector tests:
 
 ```powershell
-cd demo-site
-npm install
-npm run lint
-npm run build
+cd demo_site
+python -m pytest -q
 cd ..
 python -m pytest collector/test_collector.py
 ```
@@ -224,7 +222,7 @@ For local development workflows and contribution conventions, see
 ```text
 backend/       FastAPI API, detectors, profiling, scoring, AI, and migrations
 collector/     Durable Nginx JSON-log tailer and authenticated batch client
-demo-site/     React ShopSphere portal and direct security-scenario generator
+demo_site/     Sentinel portal and direct security-scenario generator
 frontend/      React 18 and Vite dashboard
 nginx/         Reverse-proxy and structured access-log configuration
 scripts/       Direct structured-event generators and seed utilities

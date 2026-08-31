@@ -10,7 +10,7 @@ setup and operations guide.
 client
   |
   v
-monitored-nginx ---> React demo-site -- direct scenario events -+
+monitored-nginx ---> Sentinel portal -- direct scenario events -+
   |                                                            |
   +-- JSON access log --> collector -- authenticated batches --+
                                                                |
@@ -33,8 +33,8 @@ bound to loopback.
 
 ### Monitored portal and Nginx
 
-`demo-site/` is a React ShopSphere portal with deterministic, bounded security
-scenarios. It posts structured storefront, authentication, background-traffic,
+`demo_site/` is a Sentinel portal with deterministic, bounded security
+scenarios. It posts structured authentication, background-traffic,
 and scenario events to `POST /api/v1/log`. `nginx/nginx.conf` proxies the portal
 and emits structured JSON access logs for real page and asset requests, which the
 collector ingests separately.

@@ -70,15 +70,13 @@ npm run build
 Oxlint is the configured linter and Node's test runner executes utility tests.
 There is no configured Prettier or ESLint command.
 
-## Collector and demo portal
+## Collector and Sentinel portal
 
 Validate the demo portal and collector from the repository root:
 
 ```powershell
-cd demo-site
-npm install
-npm run lint
-npm run build
+cd demo_site
+python -m pytest -q
 cd ..
 python -m pytest collector/test_collector.py
 ```
