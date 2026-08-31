@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { SEVERITY_BADGE_CLASSES } from "../../constants/severity";
 import { formatRelativeTime } from "../../utils/time";
 
@@ -58,9 +58,8 @@ function AlertRow({ alert }) {
       )}
 
       {!hasExplanation && (
-        <div className="mt-1 flex items-center gap-1.5 pl-7 text-xs text-slate-500">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Analyzing...
+        <div className="mt-1 pl-7 text-xs text-slate-500">
+          Detection recorded. Ask the administrator assistant for analysis.
         </div>
       )}
       {alert.evidence && (
@@ -79,10 +78,8 @@ function AlertRow({ alert }) {
 /**
  * Live-updating alert list. `alerts` is owned by useAlertStream (Dashboard
  * passes it down) — most recent first, WebSocket-supplemented, capped at
- * 200. Each row expands to show explanation + mitigation_steps once the
- * background LLM job has populated them; until then it shows an
- * "Analyzing..." indicator rather than pretending there's nothing to wait
- * for.
+ * 200. Detection and scoring happen locally; an administrator can request
+ * deeper analysis from the assistant when needed.
  */
 export default function AlertFeed({ alerts }) {
   if (alerts.length === 0) {

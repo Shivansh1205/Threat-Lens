@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { ADMIN_KEY_STORAGE } from "../utils/detectionSettings";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8002";
 
@@ -21,11 +22,26 @@ export function useChat() {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [adminKey, setAdminKeyState] = useState(() => sessionStorage.getItem(ADMIN_KEY_STORAGE) || "");
+  const [authError, setAuthError] = useState(null);
+
+  const setAdminKey = useCallback((key) => {
+    const value = key.trim();
+    if (value) sessionStorage.setItem(ADMIN_KEY_STORAGE, value);
+    else sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+    setAdminKeyState(value);
+    setAuthError(null);
+  }, []);
 
   const sendMessage = useCallback(
     async (text) => {
       const trimmed = text.trim();
       if (!trimmed) return;
+      const key = sessionStorage.getItem(ADMIN_KEY_STORAGE) || adminKey;
+      if (!key) {
+        setAuthError("Enter the admin API key to use analyst chat.");
+        return;
+      }
 
       setMessages((prev) => [...prev, { id: generateId(), role: "user", text: trimmed }]);
       setIsLoading(true);
@@ -34,9 +50,14 @@ export function useChat() {
       try {
         const res = await fetch(`${API_URL}/api/v1/chat`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-ThreatLens-Admin-Key": key },
           body: JSON.stringify({ session_id: sessionId, message: trimmed }),
         });
+        if (res.status === 401) {
+          setAdminKey("");
+          setAuthError("The admin API key is invalid or expired.");
+          throw new Error("Admin authorization required");
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
@@ -64,8 +85,8 @@ export function useChat() {
         setIsLoading(false);
       }
     },
-    [sessionId]
+    [adminKey, sessionId, setAdminKey]
   );
 
-  return { messages, sendMessage, isLoading, error };
+  return { messages, sendMessage, isLoading, error, adminKey, setAdminKey, authError };
 }

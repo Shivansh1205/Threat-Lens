@@ -8,9 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.ai.explainability import generate_explanation_task
 from app.config import get_settings
-from app.database import SessionLocal, get_db
+from app.database import get_db
 from app.detection.registry import get_registry
 from app.detection.settings import get_detection_thresholds
 from app.models.log_event import LogEvent
@@ -20,9 +19,6 @@ from app.realtime.websocket_manager import get_ws_manager
 from app.schemas.log_event import LogEventIn
 
 router = APIRouter(tags=["ingestion"])
-_explanation_db_session_factory = SessionLocal
-
-
 class LogIngestResult(BaseModel):
     event_id: UUID
     alert_ids: list[UUID]
@@ -88,9 +84,6 @@ def publish_alerts(alerts: list, background_tasks: BackgroundTasks) -> None:
                     alert.created_at.isoformat() if alert.created_at else None
                 ),
             }
-        )
-        background_tasks.add_task(
-            generate_explanation_task, alert.id, _explanation_db_session_factory
         )
 
 

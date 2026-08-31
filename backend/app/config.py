@@ -69,7 +69,7 @@ class Settings(BaseSettings):
 
     # Nginx access-log mapping. Comma-separated values are parsed by the
     # validators below so the same syntax works in .env and Compose.
-    LOGIN_PATHS: Annotated[list[str], NoDecode] = ["/login"]
+    LOGIN_PATHS: Annotated[list[str], NoDecode] = ["/login", "/demo/auth-attempt"]
 
     @field_validator("LOGIN_PATHS", mode="before")
     @classmethod
@@ -78,15 +78,16 @@ class Settings(BaseSettings):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v
 
-    # --- LLM / explainability layer (Phase 6) ---
-    OLLAMA_HOST: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "mistral"
-    # Strict timeout for any single Ollama call (explanation generation or
-    # chatbot reply). Local 7B-class models on modest hardware can take
-    # several seconds; if this is exceeded, the caller treats it as a
-    # failure and degrades gracefully (see app/ai/ollama_client.py) rather
-    # than hanging the background task or the chat request indefinitely.
+    # --- External LLM / explainability layer ---
+    # Only locally aggregated, privacy-safe context may be sent to this
+    # endpoint. The API key stays server-side and never reaches the frontend.
+    LLM_PROVIDER: str = "groq"
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
+    LLM_MODEL: str = "openai/gpt-oss-20b"
     LLM_TIMEOUT_SECONDS: float = 15.0
+    LLM_MAX_OUTPUT_TOKENS: int = 512
+    LLM_MAX_CONTEXT_CHARS: int = 12000
 
     # --- Detection thresholds (Phase 3) ---
     # Brute-force login detection: sliding window keyed by user_id.

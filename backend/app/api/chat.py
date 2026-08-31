@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.ai.chatbot import ChatbotModule
 from app.database import get_db
+from app.security import require_admin_key
 
-router = APIRouter(tags=["chat"])
+router = APIRouter(tags=["chat"], dependencies=[Depends(require_admin_key)])
 
 
 class ChatRequest(BaseModel):

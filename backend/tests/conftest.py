@@ -63,8 +63,10 @@ def _fresh_chatbot_history() -> Generator[None, None, None]:
     same rationale as ``_fresh_detector_state`` above.
     """
     chatbot_module._conversation_history.clear()
+    chatbot_module._query_scopes.clear()
     yield
     chatbot_module._conversation_history.clear()
+    chatbot_module._query_scopes.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -140,7 +142,6 @@ def client(
     test_engine = db_session.get_bind()
     TestDecaySessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     monkeypatch.setattr("app.main._decay_db_session_factory", TestDecaySessionLocal)
-    monkeypatch.setattr("app.api.logs._explanation_db_session_factory", TestDecaySessionLocal)
 
     def override_get_db() -> Generator[Session, None, None]:
         yield db_session

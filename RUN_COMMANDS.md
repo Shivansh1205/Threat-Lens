@@ -55,11 +55,13 @@ python scripts/generate_logs.py --scenario unusual_ip --speed 10
 python scripts/generate_logs.py --scenario mixed --speed 10
 ```
 
-## Optional local AI model
+## Optional Groq administrator analysis
 
 ```powershell
-docker compose --profile ai up -d ollama
-docker compose exec ollama ollama pull mistral
+Set `LLM_API_KEY` in the root `.env`, then restart the stack. The assistant is
+read-only, requires `ADMIN_API_KEY`, and sends targeted evidence to Groq only
+when an administrator submits a chat question. The provider URL and model can
+be changed through `LLM_BASE_URL` and `LLM_MODEL`.
 ```
 
 ## Stop or restart
@@ -85,7 +87,7 @@ docker compose up --build -d
 ## Reset all project data
 
 The following command stops the stack and permanently deletes its database,
-logs, collector checkpoint, and optional Ollama model volume:
+logs, and collector checkpoint:
 
 ```powershell
 docker compose down -v
